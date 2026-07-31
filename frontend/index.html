@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SetrxAI</title>
+    <style>
+      /* Ye sirf React load hone tak dikhega, turant dikhta hai */
+      #initial-loader {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(to bottom right, #0a0a12, #12081f);
+        z-index: 9999;
+      }
+      #initial-loader img {
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.6; transform: scale(0.92); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="initial-loader">
+        <img src="/logo.png" alt="SetrxAI" />
+      </div>
+    </div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

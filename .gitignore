@@ -1,0 +1,94 @@
+# =========================
+# Dependencies
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# Environment Variables
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Build
+# =========================
+dist/
+build/
+.vite/
+
+# =========================
+# Logs
+# =========================
+logs/
+*.log
+
+# =========================
+# Cache
+# =========================
+.cache/
+.parcel-cache/
+.eslintcache
+
+# =========================
+# OS Files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# VS Code
+# =========================
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# =========================
+# JetBrains
+# =========================
+.idea/
+
+# =========================
+# Coverage
+# =========================
+coverage/
+
+# =========================
+# Temporary Files
+# =========================
+tmp/
+temp/
+*.tmp
+
+# =========================
+# Runtime
+# =========================
+*.pid
+*.seed
+*.pid.lock
+
+# =========================
+# Local Database
+# =========================
+*.sqlite
+*.sqlite3
+
+# =========================
+# Uploads (agar local save karte ho)
+# =========================
+uploads/
+generated/
+images/
+
+# =========================
+# Misc
+# =========================
+*.bak
+*.swp
+*.swo
