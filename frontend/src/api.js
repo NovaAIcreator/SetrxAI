@@ -42,6 +42,15 @@ export const api = {
   changePassword: (currentPassword, newPassword) =>
     apiRequest('/api/auth/me/password', { method: 'PATCH', body: JSON.stringify({ currentPassword, newPassword }) }).then(r => r.json()),
 
+  forgotPassword: (email) =>
+    apiRequest('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }).then(r => r.json()),
+
+  verifyOTP: (email, otp) =>
+    apiRequest('/api/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, otp }) }).then(r => r.json()),
+
+  resetPassword: (email, otp, newPassword) =>
+    apiRequest('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ email, otp, newPassword }) }).then(r => r.json()),
+
   getSessions: () => apiRequest('/api/sessions').then(r => r.json()),
 
   createSession: (mode, projectId = null) =>
