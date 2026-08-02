@@ -1,7 +1,4 @@
 // chatRoute.js
-// Main chat endpoint — sandwich history trimming + auto image-gen (URL-based,
-// broken-image fix) + live-search + file-context
-
 const express = require('express');
 const router = express.Router();
 
@@ -9,8 +6,6 @@ const KeyManager = require('./keyManager');
 const { callGroq } = require('./groq');
 const { callGemini } = require('./gemini');
 const { callOpenRouter } = require('./openrouter');
-const { generateImageBuffer } = require('./imageGen');
-const { saveImage } = require('./imageStore');
 const { detectSearchIntent, searchWeb } = require('./searchIntent');
 const modePrompts = require('./prompts');
 const authMiddleware = require('./authMiddleware');
@@ -48,11 +43,9 @@ function estimateTokens(text) {
 
 function trimHistoryForBudget(messages, maxTokens) {
   if (messages.length <= KEEP_FIRST_N) return messages;
-
   const firstChunk = messages.slice(0, KEEP_FIRST_N);
   const remaining = messages.slice(KEEP_FIRST_N);
   let usedTokens = firstChunk.reduce((sum, m) => sum + estimateTokens(m.content), 0);
-
   const recentChunk = [];
   for (let i = remaining.length - 1; i >= 0; i--) {
     const msgTokens = estimateTokens(remaining[i].content);
@@ -60,34 +53,15 @@ function trimHistoryForBudget(messages, maxTokens) {
     recentChunk.unshift(remaining[i]);
     usedTokens += msgTokens;
   }
-
   const droppedCount = remaining.length - recentChunk.length;
   if (droppedCount > 0) {
     return [
       ...firstChunk,
-      { role: 'system', content: `[Note: ${droppedCount} purane messages history mein hai lekin yaha nahi dikhaye gaye — sirf shuruaat aur recent messages dikhaye ja rahe hai]` },
+      { role: 'system', content: `[Note: ${droppedCount} older messages not shown]` },
       ...recentChunk,
     ];
   }
   return [...firstChunk, ...recentChunk];
-}
-
-const IMAGE_INTENT_KEYWORDS = [
-  'image banao', 'image bana do', 'image bana de', 'picture banao', 'photo banao',
-  'chitra banao', 'tasveer banao', 'tasveer bana do', 'tasvir banao',
-  'draw an image', 'draw a picture', 'generate an image', 'generate image',
-  'create an image', 'create a picture', 'make an image', 'make a picture',
-  'image generate karo', 'image generate kar do', 'photo generate karo',
-  'ek image bana', 'ek photo bana', 'ek picture bana', 'draw me', 'paint me', 'sketch',
-  'image do', 'photo do', 'tasveer do', 'picture do', 'image de do', 'photo de do',
-  'iski image', 'iska image', 'is ki image', 'is ka image', 'draw kar', 'draw kardo',
-  'banade image', 'image bnado', 'bnado image', 'image chahiye', 'photo chahiye',
-];
-
-function detectImageIntent(text) {
-  if (!text) return false;
-  const lower = text.toLowerCase();
-  return IMAGE_INTENT_KEYWORDS.some((k) => lower.includes(k));
 }
 
 router.post('/sessions', authMiddleware, async (req, res) => {
@@ -126,7 +100,7 @@ function optionalAuth(req, res, next) {
     try {
       const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
       req.userId = decoded.userId;
-    } catch (e) { /* invalid token, treat as guest */ }
+    } catch (e) {}
   }
   next();
 }
@@ -160,55 +134,28 @@ router.post('/chat', optionalAuth, async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  // ---- Auto image generation — ab chhoti URL bhejta hai, bada base64 nahi ----
-  if (!image && detectImageIntent(lastUserMessage.content)) {
-    try {
-      const { buffer, contentType } = await generateImageBuffer(lastUserMessage.content);
-      const id = saveImage(buffer, contentType);
-      const imageUrl = `${req.protocol}://${req.get('host')}/api/image/${id}`;
-      const markdown = `![Generated image](${imageUrl})`;
-
-      if (canSaveToDb) {
-        await pool.query('INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3)', [sessionId, 'assistant', markdown]);
-      }
-
-      res.write(`data: ${JSON.stringify({ chunk: markdown })}\n\n`);
-      res.write(`data: ${JSON.stringify({ done: true, provider: 'image-gen' })}\n\n`);
-      res.end();
-      return;
-    } catch (err) {
-      console.error('Auto image generation failed:', err.message);
-      res.write(`data: ${JSON.stringify({ error: 'Image generate nahi ho payi, thodi der baad try karo' })}\n\n`);
-      res.end();
-      return;
-    }
-  }
-
   let searchContext = null;
   const needsSearch = await detectSearchIntent(lastUserMessage.content);
   if (needsSearch) {
     try {
       searchContext = await searchWeb(lastUserMessage.content);
     } catch (err) {
-      console.warn('Search skip/fail hua:', err.message);
+      console.warn('Search skip/fail:', err.message);
     }
   }
 
   const systemPrompt = modePrompts[mode];
   const currentDate = new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' });
   const dateNote = `\n\nToday's date: ${currentDate}.`;
-
   const searchNote = searchContext
-    ? `\n\nLive web search results for this query (use this to ground your answer in current, accurate info — prefer this over old memory):\n${searchContext}`
+    ? `\n\nLive web search results:\n${searchContext}`
     : '';
-
   const fileNote = file
-    ? `\n\nUser has attached a file named "${file.name}". Use its content to answer their question:\n${file.text}`
+    ? `\n\nUser attached file "${file.name}":\n${file.text}`
     : '';
 
   const finalSystemPrompt = systemPrompt + dateNote + searchNote + fileNote;
   const systemTokens = estimateTokens(finalSystemPrompt);
-
   const order = image ? ['gemini'] : modeProviderOrder[mode];
   let succeeded = false;
 
@@ -219,7 +166,6 @@ router.post('/chat', optionalAuth, async (req, res) => {
 
     for (let attempt = 0; attempt < totalKeys; attempt++) {
       if (manager.allKeysOnCooldown()) break;
-
       const keyEntry = manager.getAvailableKey();
       if (!keyEntry) break;
 
@@ -256,8 +202,7 @@ router.post('/chat', optionalAuth, async (req, res) => {
   }
 
   if (!succeeded) {
-    const errorMsg = image ? 'Image analyze karne mein problem hui, Gemini keys check karo' : 'Sabhi AI providers abhi unavailable hain';
-    res.write(`data: ${JSON.stringify({ error: errorMsg })}\n\n`);
+    res.write(`data: ${JSON.stringify({ error: 'Sabhi AI providers abhi unavailable hain' })}\n\n`);
     res.end();
   }
 });
