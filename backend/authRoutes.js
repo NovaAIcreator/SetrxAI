@@ -3,22 +3,12 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const pool = require('./db');
 const authMiddleware = require('./authMiddleware');
 
 function normalizeEmail(email) {
   return email.trim().toLowerCase();
-}
-
-function getTransporter() {
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_PASS,
-    },
-  });
 }
 
 function generate4DigitOTP() {
@@ -122,16 +112,19 @@ router.post('/forgot-password', async (req, res) => {
     const result = await pool.query('SELECT id, name FROM users WHERE email = $1', [email]);
     const user = result.rows[0];
     if (!user) return res.json({ success: true });
+
     const otp = generate4DigitOTP();
     const expiresAt = Date.now() + 10 * 60 * 1000;
     otpStore.set(email, { otp, expiresAt, userId: user.id });
-    const transporter = getTransporter();
-    await transporter.sendMail({
-      from: '"SetrxAI" <' + process.env.GMAIL_USER + '>',
+
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({
+      from: 'SetrxAI <onboarding@resend.dev>',
       to: email,
       subject: 'Your SetrxAI password reset code',
-      html: '<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0a0a12;color:#e4e4e7;border-radius:16px;"><h2 style="color:#a855f7;">SetrxAI</h2><p>Hi ' + user.name + ',</p><p>Your password reset code is:</p><div style="text-align:center;margin:28px 0;"><span style="font-size:48px;font-weight:bold;letter-spacing:12px;color:#a855f7;">' + otp + '</span></div><p style="color:#71717a;font-size:13px;">This code expires in 10 minutes.</p></div>',
+      html: '<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#0a0a12;color:#e4e4e7;border-radius:16px;"><h2 style="color:#a855f7;">SetrxAI</h2><p>Hi ' + user.name + ',</p><p>Your password reset code is:</p><div style="text-align:center;margin:28px 0;"><span style="font-size:48px;font-weight:bold;letter-spacing:12px;color:#a855f7;">' + otp + '</span></div><p style="color:#71717a;font-size:13px;">This code expires in 10 minutes. If you did not request this, ignore this email.</p></div>',
     });
+
     res.json({ success: true });
   } catch (err) {
     console.error('Forgot password error:', err.message);
@@ -188,4 +181,4 @@ router.delete('/me', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
-    
+      
