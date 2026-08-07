@@ -12,7 +12,7 @@ import { useState, useRef, useEffect } from "react";
 // Vercel pe deploy kiya hai to:
 //   const BACKEND_URL = "https://your-app.vercel.app/api/chat";
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const BACKEND_URL = "http://localhost:5000/api/chat";
+const BACKEND_URL = "https://setrxai-backend.onrender.com/api/chat";
 
 export default function ChatPage({ config }) {
   const [messages, setMessages] = useState([
