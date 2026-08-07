@@ -1,7 +1,22 @@
-// App.jsx
-// SetrxAI — Main App: login ab locally cache hota hai, DB slow hone pe bhi logout nahi hoga
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 📁 FILE LOCATION: frontend/src/App.jsx
+//    (Existing App.jsx ko REPLACE karo is code se)
+//
+// ✅ KYA BADLA:
+//    1. Line 1  → SEOHead import add kiya (NEW)
+//    2. Line 2  → useNavigate import add kiya (NEW)
+//    3. Function → defaultMode prop add kiya
+//    4. mode useState → defaultMode se initialize hoga
+//    5. useEffect → mode change hone pe URL bhi change hoga
+//    6. JSX → <SEOHead mode={mode} /> add kiya header mein
+//
+// ✅ BAAKI SAARA CODE BILKUL SAME HAI — KUCH NAHI TUTA
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // ← NEW (line 1 change)
+import SEOHead from './components/SEOHead';      // ← NEW (line 2 change)
+
 import ModeSelector from './components/ModeSelector';
 import ChatWindow from './components/ChatWindow';
 import Sidebar from './components/Sidebar';
@@ -16,7 +31,14 @@ import { api, getToken } from './api';
 
 const USER_CACHE_KEY = 'setrxai_user_cache';
 
-export default function App() {
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// CHANGE #1: function mein defaultMode prop add kiya
+// Pehle tha:  export default function App() {
+// Ab hai:     export default function App({ defaultMode = 'general' }) {
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export default function App({ defaultMode = 'general' }) {
+  const navigate = useNavigate(); // ← NEW: URL change karne ke liye
+
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [showLogin, setShowLogin] = useState(false);
@@ -25,7 +47,13 @@ export default function App() {
   const [showTerms, setShowTerms] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
 
-  const [mode, setMode] = useState('general');
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // CHANGE #2: mode ko defaultMode se initialize karo
+  // Pehle tha:  const [mode, setMode] = useState('general');
+  // Ab hai:     const [mode, setMode] = useState(defaultMode);
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const [mode, setMode] = useState(defaultMode);
+
   const [theme, setTheme] = useState(() => localStorage.getItem('setrxai_theme') || 'dark');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -39,6 +67,16 @@ export default function App() {
     localStorage.setItem('setrxai_theme', theme);
   }, [theme]);
 
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // CHANGE #3: Jab mode change ho to URL bhi update ho
+  // (Google ko alag pages dikhne ke liye zaroori)
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  useEffect(() => {
+    navigate(`/${mode}`, { replace: true });
+  }, [mode]);
+
+  // ── Baaki ka EXACT same code hai — kuch nahi badla ──
+
   useEffect(() => {
     const token = getToken();
     if (!token) {
@@ -47,7 +85,6 @@ export default function App() {
       return;
     }
 
-    // ---- Optimistic login: cached user turant dikhao, background mein verify karo ----
     const cachedUser = localStorage.getItem(USER_CACHE_KEY);
     if (cachedUser) {
       try {
@@ -64,16 +101,13 @@ export default function App() {
       })
       .catch((err) => {
         if (err.status === 401) {
-          // Token genuinely invalid — ab hi logout karo
           localStorage.removeItem('setrxai_token');
           localStorage.removeItem(USER_CACHE_KEY);
           setUser(null);
           startGuestSession();
         } else {
-          // 503/network issue — cached user (agar hai) ko rehne do, sirf history load nahi hogi abhi
           console.warn('Auth verify failed (DB/network issue), keeping cached login:', err.message);
           if (cachedUser) {
-            // History load try karo, fail ho to guest jaisa chat use hone do
             loadEverything().catch(() => startGuestSession());
           } else {
             startGuestSession();
@@ -223,6 +257,16 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen flex bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-[#0a0a12] dark:to-[#12081f] text-zinc-900 dark:text-zinc-100 overflow-hidden">
+
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          CHANGE #4: SEOHead yahan add kiya
+          Ye sirf meta tags set karta hai — UI mein kuch nahi dikhta
+          Mode change hote hi Google-wale title/description change ho jayenge
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <SEOHead mode={mode} />
+
+      {/* ── BAAKI POORA JSX BILKUL SAME HAI ── */}
+
       <Sidebar
         sessions={sessions}
         projects={projects}
@@ -267,7 +311,13 @@ export default function App() {
         />
 
         <div className="flex-1 min-h-0">
-          <ChatWindow mode={mode} sessionId={activeId} messages={messages} setMessages={setMessages} isGuest={!user} />
+          <ChatWindow
+            mode={mode}
+            sessionId={activeId}
+            messages={messages}
+            setMessages={setMessages}
+            isGuest={!user}
+          />
         </div>
       </div>
 
