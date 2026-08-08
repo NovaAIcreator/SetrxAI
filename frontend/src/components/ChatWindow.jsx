@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Paperclip, Mic, Send, X, FileText } from 'lucide-react';
 import Message from './Message';
+// YE LINE ADD KARO existing imports ke neeche
+import ModeHero from './ModeHero';
 import { api } from '../api';
 
 function TypingDots() {
@@ -223,11 +225,13 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
   return (
     <div className="flex flex-col h-full min-h-0">
       <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto py-4 max-w-5xl mx-auto w-full">
-        {messages.length === 0 && (
-          <div className="flex items-center justify-center h-full text-zinc-500 text-sm sm:text-base px-4 text-center animate-fadeInUp">
-            Ask SetrxAI anything — {mode} mode active
-          </div>
-        )}
+    {messages.length === 0 && (
+     <ModeHero mode={mode} onSelect={(text) => setInput(text)} />
+    )}
+          
+            
+          
+        
         {displayMessages.map((msg, i) => (
           <Message key={i} role={msg.role} content={msg.content} />
         ))}
