@@ -4,11 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+  "dev": "vite",
+  "build": "vite build && node scripts/prerender.js",
+  "preview": "vite preview"
   },
+  
   "dependencies": {
     "html2canvas": "^1.4.1",
     "lucide-react": "^1.27.0",
