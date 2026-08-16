@@ -1,28 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-
-  <url>
-    <loc>https://setrxai.onrender.com/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-
-  <url>
-    <loc>https://setrxai.onrender.com/general</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
-  <url>
-    <loc>https://setrxai.onrender.com/study</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
-  <url>
-    <loc>https://setrxai.onrender.com/coding</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
+  <url><loc>https://setrxai.onrender.com/</loc><priority>1.0</priority><changefreq>weekly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/general</loc><priority>0.9</priority><changefreq>weekly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/study</loc><priority>0.9</priority><changefreq>weekly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/coding</loc><priority>0.9</priority><changefreq>weekly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog</loc><priority>0.8</priority><changefreq>weekly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/free-ai-tool-for-cbse-students-india</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/how-to-use-ai-for-jee-preparation</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/free-ai-coding-assistant-python-beginners</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/best-free-chatgpt-alternative-india-2026</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/how-to-debug-code-using-ai-free</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/ai-for-neet-preparation-free-india</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/ai-math-solver-free-indian-students</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/how-to-learn-javascript-faster-with-ai</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/ai-essay-writer-free-indian-students</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/free-ai-code-reviewer-beginners-india</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/ai-for-competitive-programming-india</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/ai-study-planner-board-exams-india</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/free-ai-for-college-students-india</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/how-ai-helps-data-structures-algorithms</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/ai-for-upsc-preparation-free-india</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/how-to-build-projects-using-ai-coding-assistant</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/ai-for-english-speaking-improvement-india</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/free-ai-resume-builder-freshers-india</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/ai-for-react-developers-free-india</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
+  <url><loc>https://setrxai.onrender.com/blog/why-setrxai-best-free-ai-students-developers-india</loc><priority>0.8</priority><changefreq>monthly</changefreq></url>
 </urlset>
