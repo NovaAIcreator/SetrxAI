@@ -32,6 +32,8 @@ app.use('/api', fileRoute);
 
 const chatRoute = require('./chatRoute');
 app.use('/api', chatRoute);
+const imageRoute = require('./imageRoute');
+app.use('/api', imageRoute);
 
 app.get('/health', (req, res) => {
   res.status(200).json({
