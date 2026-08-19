@@ -1,5 +1,5 @@
 // ChatWindow.jsx
-
+import ImageGenButton, { detectImageIntent } from './ImageGenButton';
 import { useState, useEffect, useRef } from 'react';
 import { Paperclip, Mic, Send, X, FileText } from 'lucide-react';
 import Message from './Message';
@@ -318,7 +318,22 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
               rows={1}
               className="flex-1 resize-none bg-transparent text-zinc-900 dark:text-zinc-100 text-sm sm:text-base px-1 py-2 outline-none max-h-32"
             />
+<div className="relative">
+  <ImageGenButton
+    inputText={input}
+    onImageGenerated={(url, prompt) => {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'user', content: `🎨 Generate image: "${prompt}"` },
+        { role: 'assistant', content: `
 
+![Generated Image](${url})
+
+` },
+      ]);
+    }}
+  />
+</div>
             <button
               onClick={toggleListening}
               className={`shrink-0 p-2.5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ${
