@@ -575,10 +575,10 @@ Take a photo of your textbook problem and upload it to SetrxAI — it reads and 
 
 ### Method 3: Voice Input
 Speak your math problem in Hindi or English — SetrxAI understands and solves.
-
-## 
+    `
+  },
 // ── NAYE 20 BLOGS — paste karo last ]; se pehle ──
-  ,{
+  {
     id: 21,
     slug: "free-ai-for-class-10-students",
     title: "Best Free AI for Class 10 Students — Ace Your Board Exams",
