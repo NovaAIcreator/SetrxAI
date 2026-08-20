@@ -1,9 +1,8 @@
-// ChatWindow.jsx
-import ImageGenButton, { detectImageIntent } from './ImageGenButton';
+// ChatWindow.jsx — PURA REPLACE KARO
+
 import { useState, useEffect, useRef } from 'react';
-import { Paperclip, Mic, Send, X, FileText } from 'lucide-react';
+import { Paperclip, Mic, Send, X, FileText, Wand2 } from 'lucide-react';
 import Message from './Message';
-// YE LINE ADD KARO existing imports ke neeche
 import ModeHero from './ModeHero';
 import { api } from '../api';
 
@@ -20,12 +19,32 @@ function TypingDots() {
   );
 }
 
+function ImageGeneratingAnimation() {
+  return (
+    <div className="flex gap-2 sm:gap-3 justify-start mb-4 px-2 sm:px-4">
+      <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-xs animate-pulse">🎨</div>
+      <div className="flex flex-col gap-2 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-2xl rounded-bl-md px-4 py-3.5 min-w-[200px]">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm text-zinc-600 dark:text-zinc-300 font-medium">Image ban rahi hai...</span>
+        </div>
+        <div className="relative h-1.5 bg-zinc-100 dark:bg-white/10 rounded-full overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-blue-500 rounded-full animate-pulse" style={{ width: '75%' }} />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer" />
+        </div>
+        <span className="text-xs text-zinc-400">✨ 10-30 seconds wait karo...</span>
+      </div>
+    </div>
+  );
+}
+
 export default function ChatWindow({ mode, sessionId, messages, setMessages, isGuest }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [waitingFirstChunk, setWaitingFirstChunk] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
   const [isListening, setIsListening] = useState(false);
+  const [imgLoading, setImgLoading] = useState(false);
 
   const [attachedFile, setAttachedFile] = useState(null);
   const [parsingFile, setParsingFile] = useState(false);
@@ -36,8 +55,6 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
   const docInputRef = useRef(null);
   const recognitionRef = useRef(null);
 
-  // ---- Smart scroll: history khulte hi bottom pe jump, naya msg bhejte hi smooth scroll,
-  // AI streaming ke dauraan scroll disturb nahi hoga ----
   const isNewSessionLoad = useRef(true);
   const shouldScrollRef = useRef(false);
 
@@ -48,35 +65,28 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
-
     if (isNewSessionLoad.current) {
-      // History load hui — turant last message pe jump (koi animation nahi)
       container.scrollTop = container.scrollHeight;
       isNewSessionLoad.current = false;
     } else if (shouldScrollRef.current) {
-      // User ne abhi message bheja — smoothly neeche scroll karo
       container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
       shouldScrollRef.current = false;
     }
-    // else: AI answer stream ho raha hai — scroll ko chhedo mat
   }, [messages]);
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
-
     const recognition = new SpeechRecognition();
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.lang = 'en-IN';
-
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
       setInput((prev) => (prev ? prev + ' ' + transcript : transcript));
     };
     recognition.onend = () => setIsListening(false);
     recognition.onerror = () => setIsListening(false);
-
     recognitionRef.current = recognition;
   }, []);
 
@@ -97,7 +107,6 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
   const handleImageSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = reader.result.split(',')[1];
@@ -111,11 +120,9 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
   const handleDocSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     setFileError('');
     setParsingFile(true);
     setAttachedFile(null);
-
     const reader = new FileReader();
     reader.onload = async () => {
       const base64 = reader.result.split(',')[1];
@@ -138,44 +145,84 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
     setFileError('');
   };
 
+  // ── IMAGE GENERATE FUNCTION ──
+  const generateImage = async () => {
+    const prompt = input.trim();
+    if (!prompt || imgLoading) return;
+    setImgLoading(true);
+    setInput('');
+    shouldScrollRef.current = true;
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', content: `🎨 Image banao: "${prompt}"` },
+    ]);
+    try {
+      const token = localStorage.getItem('setrxai_token');
+      const res = await fetch(
+        'https://setrxai-backend.onrender.com/api/generate-image',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ prompt }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      shouldScrollRef.current = true;
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `
+
+![Generated Image](${data.imageUrl})
+
+\n\n✨ **"${prompt}"** — image ready hai!`,
+        },
+      ]);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: `⚠️ Image nahi bani: ${err.message}` },
+      ]);
+    } finally {
+      setImgLoading(false);
+    }
+  };
+
   const sendMessage = async () => {
     if ((!input.trim() && !imagePreview && !attachedFile) || loading) return;
-
     const displayText = input || (attachedFile ? `📄 "${attachedFile.name}" ke baare mein poochha` : '(Image bheji gayi)');
     const userMessage = { role: 'user', content: displayText };
     const updatedMessages = [...messages, userMessage];
     shouldScrollRef.current = true;
     setMessages(updatedMessages);
-
     const imageToSend = imagePreview ? { mimeType: imagePreview.mimeType, data: imagePreview.data } : null;
     const fileToSend = attachedFile ? { name: attachedFile.name, text: attachedFile.text } : null;
-
     setInput('');
     setImagePreview(null);
     setAttachedFile(null);
     setLoading(true);
     setWaitingFirstChunk(true);
     setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
-
     try {
       const response = await api.chatStream(mode, updatedMessages, isGuest ? null : sessionId, imageToSend, fileToSend);
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n\n');
         buffer = lines.pop();
-
         for (const line of lines) {
           if (!line.startsWith('data:')) continue;
           const jsonStr = line.replace('data:', '').trim();
           if (!jsonStr) continue;
-
           try {
             const parsed = JSON.parse(jsonStr);
             if (parsed.chunk) {
@@ -197,7 +244,7 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
                 return updated;
               });
             }
-          } catch (e) { /* skip incomplete chunk */ }
+          } catch (e) { }
         }
       }
     } catch (err) {
@@ -225,17 +272,14 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
   return (
     <div className="flex flex-col h-full min-h-0">
       <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto py-4 max-w-5xl mx-auto w-full">
-    {messages.length === 0 && (
-     <ModeHero mode={mode} onSelect={(text) => setInput(text)} />
-    )}
-          
-            
-          
-        
+        {messages.length === 0 && (
+          <ModeHero mode={mode} onSelect={(text) => setInput(text)} />
+        )}
         {displayMessages.map((msg, i) => (
           <Message key={i} role={msg.role} content={msg.content} />
         ))}
         {waitingFirstChunk && <TypingDots />}
+        {imgLoading && <ImageGeneratingAnimation />}
       </div>
 
       <div className="p-3 sm:p-4">
@@ -243,10 +287,7 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
           {imagePreview && (
             <div className="mb-2 relative inline-block animate-fadeInUp">
               <img src={imagePreview.previewUrl} alt="preview" className="h-20 rounded-lg border border-zinc-300 dark:border-white/10 shadow-md" />
-              <button
-                onClick={removeImage}
-                className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-all hover:scale-110 active:scale-90"
-              >
+              <button onClick={removeImage} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-all hover:scale-110 active:scale-90">
                 <X size={12} />
               </button>
             </div>
@@ -264,10 +305,7 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
             <div className="mb-2 flex items-center gap-2 bg-white dark:bg-white/[0.06] border border-purple-200 dark:border-purple-500/20 rounded-xl px-3 py-2 text-xs shadow-sm animate-fadeInUp">
               <FileText size={15} className="text-purple-500 shrink-0" />
               <span className="truncate flex-1 text-zinc-700 dark:text-zinc-300 font-medium">{attachedFile.name}</span>
-              <button
-                onClick={removeFile}
-                className="shrink-0 w-5 h-5 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-all hover:scale-110 active:scale-90"
-              >
+              <button onClick={removeFile} className="shrink-0 w-5 h-5 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-all hover:scale-110 active:scale-90">
                 <X size={12} />
               </button>
             </div>
@@ -278,35 +316,14 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
           )}
 
           <div className="flex items-center gap-1 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-2xl px-2 py-1.5 shadow-lg backdrop-blur-sm transition-shadow focus-within:shadow-xl focus-within:ring-2 focus-within:ring-purple-500/40">
-            <input
-              type="file"
-              accept="image/*"
-              ref={fileInputRef}
-              onChange={handleImageSelect}
-              className="hidden"
-            />
-            <input
-              type="file"
-              accept=".pdf,.docx,.txt,.csv,.js,.jsx,.ts,.tsx,.py,.json,.md,.html,.css,.java,.c,.cpp,.xml,.yml,.yaml,.log"
-              ref={docInputRef}
-              onChange={handleDocSelect}
-              className="hidden"
-            />
+            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageSelect} className="hidden" />
+            <input type="file" accept=".pdf,.docx,.txt,.csv,.js,.jsx,.ts,.tsx,.py,.json,.md,.html,.css,.java,.c,.cpp,.xml,.yml,.yaml,.log" ref={docInputRef} onChange={handleDocSelect} className="hidden" />
 
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="shrink-0 p-2.5 rounded-xl text-zinc-500 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-500/10 transition-all duration-200 hover:scale-110 active:scale-95"
-              title="Send image"
-            >
+            <button onClick={() => fileInputRef.current?.click()} className="shrink-0 p-2.5 rounded-xl text-zinc-500 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-500/10 transition-all duration-200 hover:scale-110 active:scale-95" title="Send image">
               <Paperclip size={20} strokeWidth={2} />
             </button>
 
-            <button
-              onClick={() => docInputRef.current?.click()}
-              disabled={parsingFile}
-              className="shrink-0 p-2.5 rounded-xl text-zinc-500 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-500/10 transition-all duration-200 hover:scale-110 active:scale-95 disabled:opacity-30"
-              title="Send file (PDF/DOCX/code/text)"
-            >
+            <button onClick={() => docInputRef.current?.click()} disabled={parsingFile} className="shrink-0 p-2.5 rounded-xl text-zinc-500 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-500/10 transition-all duration-200 hover:scale-110 active:scale-95 disabled:opacity-30" title="Send file">
               <FileText size={20} strokeWidth={2} />
             </button>
 
@@ -318,48 +335,37 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
               rows={1}
               className="flex-1 resize-none bg-transparent text-zinc-900 dark:text-zinc-100 text-sm sm:text-base px-1 py-2 outline-none max-h-32"
             />
-<div className="relative">
-  <ImageGenButton
-    inputText={input}
-    onImageGenerated={(url, prompt) => {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'user', content: `🎨 Generate image: "${prompt}"` },
-        { role: 'assistant', content: `
 
-![Generated Image](${url})
-
-` },
-      ]);
-    }}
-  />
-</div>
+            {/* 🎨 IMAGE GENERATE BUTTON */}
             <button
-              onClick={toggleListening}
-              className={`shrink-0 p-2.5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ${
-                isListening
-                  ? 'text-red-500 bg-red-100 dark:bg-red-500/20 animate-pulse'
+              onClick={generateImage}
+              disabled={imgLoading || !input.trim()}
+              title="Type prompt and generate image"
+              className={`shrink-0 p-2.5 rounded-xl transition-all duration-300 hover:scale-110 active:scale-95
+                ${imgLoading
+                  ? 'bg-gradient-to-br from-purple-600 to-fuchsia-600 text-white animate-pulse shadow-lg shadow-purple-500/40'
                   : 'text-zinc-500 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-500/10'
-              }`}
-              title="Click to Speak"
+                }`}
             >
+              {imgLoading
+                ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                : <Wand2 size={20} strokeWidth={2} />
+              }
+            </button>
+
+            <button onClick={toggleListening} className={`shrink-0 p-2.5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ${isListening ? 'text-red-500 bg-red-100 dark:bg-red-500/20 animate-pulse' : 'text-zinc-500 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-500/10'}`} title="Click to Speak">
               <Mic size={20} strokeWidth={2} />
             </button>
 
-            <button
-              onClick={sendMessage}
-              disabled={loading}
-              title="Send message"
-              className="bg-gradient-to-br from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-50 text-white rounded-xl p-2.5 transition-all duration-200 shrink-0 hover:scale-110 active:scale-95 shadow-md"
-            >
+            <button onClick={sendMessage} disabled={loading} title="Send message" className="bg-gradient-to-br from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-50 text-white rounded-xl p-2.5 transition-all duration-200 shrink-0 hover:scale-110 active:scale-95 shadow-md">
               <Send size={20} strokeWidth={2} className={loading ? 'animate-pulse' : ''} />
             </button>
           </div>
           <p className="text-[11px] text-zinc-500 text-center mt-1.5">
-            Paperclip = attach image &nbsp;•&nbsp; Document icon = PDF/DOCX/code/text file
+            Paperclip = attach image &nbsp;•&nbsp; Doc = PDF/code &nbsp;•&nbsp; 🪄 = AI image generate
           </p>
         </div>
       </div>
     </div>
   );
-}
+      }
