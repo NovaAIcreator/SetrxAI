@@ -1192,4 +1192,9 @@ Common CSS issues AI solves:
 4. **Blog Layout** — Articles and sidebar
 5. **Login/Signup Form** — Styled forms
 
-For any project, just describe it to
+For any project, just describe it to SetrxAI and get complete HTML/CSS code with explanations.
+
+👉 **[Start Building — setrxai.onrender.com/coding](https://setrxai.onrender.com/coding)**
+    `
+  },
+];
