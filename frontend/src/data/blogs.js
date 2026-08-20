@@ -1198,3 +1198,6 @@ For any project, just describe it to SetrxAI and get complete HTML/CSS code with
     `
   },
 ];
+export function getBlogBySlug(slug) {
+  return blogs.find((blog) => blog.slug === slug) || null;
+}
