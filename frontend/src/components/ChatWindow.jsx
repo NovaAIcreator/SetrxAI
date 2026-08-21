@@ -20,40 +20,112 @@ function TypingDots() {
 }
 
 function ImageGeneratingAnimation() {
+  const [dots, setDots] = useState('');
+  const [step, setStep] = useState(0);
+  const steps = ['Initializing AI...', 'Processing prompt...', 'Generating pixels...', 'Adding details...', 'Almost ready...'];
+
+  useEffect(() => {
+    const d = setInterval(() => setDots((p) => p.length >= 3 ? '' : p + '.'), 500);
+    const s = setInterval(() => setStep((p) => (p + 1) % steps.length), 2000);
+    return () => { clearInterval(d); clearInterval(s); };
+  }, []);
+
   return (
     <div className="flex gap-2 sm:gap-3 justify-start mb-4 px-2 sm:px-4">
-      <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-xs">🎨</div>
-      <div className="flex flex-col gap-2 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-2xl rounded-bl-md px-4 py-3 min-w-[220px]">
-        <div className="flex items-center gap-2">
-          <div className="relative w-5 h-5">
-            <div className="absolute inset-0 rounded-full border-2 border-purple-200 dark:border-purple-500/20" />
-            <div className="absolute inset-0 rounded-full border-2 border-t-purple-500 animate-spin" />
+      <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-xs animate-pulse">🎨</div>
+      <div className="flex flex-col gap-3 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-2xl rounded-bl-md px-4 py-3.5 min-w-[260px] max-w-xs">
+        <div className="relative h-32 rounded-xl overflow-hidden bg-gradient-to-br from-purple-900/20 to-fuchsia-900/20 border border-purple-500/20">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="relative">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500/20 to-fuchsia-500/20 border border-purple-500/30 flex items-center justify-center">
+                <span className="text-3xl animate-bounce">🖼️</span>
+              </div>
+              <div className="absolute -inset-3 rounded-full border-2 border-purple-500/20 animate-ping" />
+              <div className="absolute -inset-6 rounded-full border border-fuchsia-500/10 animate-ping" style={{ animationDelay: '0.5s' }} />
+            </div>
           </div>
-          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Generating image...</span>
+          <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-purple-500 to-transparent"
+            style={{ animation: 'scan 2s ease-in-out infinite' }} />
+          <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-purple-400/60 rounded-tl" />
+          <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-purple-400/60 rounded-tr" />
+          <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-purple-400/60 rounded-bl" />
+          <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-purple-400/60 rounded-br" />
         </div>
-        <div className="relative h-1.5 bg-zinc-100 dark:bg-white/10 rounded-full overflow-hidden">
-          <div className="absolute inset-y-0 left-0 w-2/3 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-blue-500 rounded-full animate-pulse" />
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-[shimmer_1.5s_infinite]" style={{ backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1">
+            {[0,1,2].map((i) => (
+              <div key={i} className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+            ))}
+          </div>
+          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">{steps[step]}{dots}</span>
         </div>
-        <span className="text-xs text-zinc-400">✨ Please wait 10-30 seconds...</span>
+        <div className="relative h-1 bg-zinc-100 dark:bg-white/10 rounded-full overflow-hidden">
+          <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-blue-500 rounded-full"
+            style={{ animation: 'progress 3s ease-in-out infinite' }} />
+        </div>
       </div>
     </div>
   );
 }
 
 function WebSearchAnimation() {
+  const [dots, setDots] = useState('');
+  const [step, setStep] = useState(0);
+  const steps = [
+    'Connecting to search engines...',
+    'Scanning web sources...',
+    'Filtering relevant results...',
+    'Extracting key insights...',
+    'Compiling answer...',
+  ];
+  const sources = ['Google', 'News', 'Wikipedia', 'Live data'];
+
+  useEffect(() => {
+    const d = setInterval(() => setDots((p) => (p.length >= 3 ? '' : p + '.')), 400);
+    const s = setInterval(() => setStep((p) => (p + 1) % steps.length), 1800);
+    return () => { clearInterval(d); clearInterval(s); };
+  }, []);
+
   return (
     <div className="flex gap-2 sm:gap-3 justify-start mb-4 px-2 sm:px-4">
-      <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-xs">🌐</div>
-      <div className="flex flex-col gap-1.5 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-2xl rounded-bl-md px-4 py-3 min-w-[200px]">
+      <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-xs animate-pulse">🌐</div>
+      <div className="flex flex-col gap-2.5 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-2xl rounded-bl-md px-4 py-3.5 min-w-[260px] max-w-xs">
         <div className="flex items-center gap-2">
           <Globe size={14} className="text-blue-500 animate-spin" style={{ animationDuration: '2s' }} />
-          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Searching the web...</span>
+          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Web Search</span>
+          <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-500 font-medium">LIVE</span>
         </div>
-        <div className="flex gap-1 mt-1">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-1 rounded-full bg-blue-500/40 animate-pulse" style={{ width: `${40 + i * 20}px`, animationDelay: `${i * 0.2}s` }} />
+        <div className="relative h-16 rounded-xl overflow-hidden bg-gradient-to-br from-blue-900/10 to-cyan-900/10 border border-blue-500/20 flex items-center justify-center">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-full border border-blue-500/30 animate-ping" />
+            <div className="absolute w-6 h-6 rounded-full border border-cyan-400/40 animate-ping" style={{ animationDelay: '0.4s' }} />
+            <div className="absolute w-3 h-3 rounded-full bg-blue-500/60 animate-pulse" />
+          </div>
+          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-blue-500 to-transparent"
+            style={{ animation: 'scan 2s ease-in-out infinite' }} />
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+            ))}
+          </div>
+          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">{steps[step]}{dots}</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {sources.map((s, i) => (
+            <span
+              key={s}
+              className="text-[10px] px-2 py-0.5 rounded-full border border-blue-500/20 text-blue-500/80 bg-blue-500/5"
+              style={{ opacity: step >= i ? 1 : 0.35, transition: 'opacity 0.4s' }}
+            >
+              {s}
+            </span>
           ))}
+        </div>
+        <div className="relative h-1 bg-zinc-100 dark:bg-white/10 rounded-full overflow-hidden">
+          <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-400 rounded-full"
+            style={{ animation: 'progress 3s ease-in-out infinite' }} />
         </div>
       </div>
     </div>
@@ -196,7 +268,7 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
       shouldScrollRef.current = true;
       setMessages((prev) => [...prev, {
         role: 'assistant',
-        content: `__IMAGE__${data.imageUrl}__PROMPT__${prompt}`,
+        content: `__IMAGE__\( {data.imageUrl}__PROMPT__ \){prompt}`,
       }]);
     } catch (err) {
       setMessages((prev) => [...prev, { role: 'assistant', content: `⚠️ Image generation failed: ${err.message}` }]);
@@ -276,6 +348,17 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
         @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
         @keyframes imagePop { 0% { transform: scale(0.9); opacity: 0; } 60% { transform: scale(1.02); } 100% { transform: scale(1); opacity: 1; } }
         .image-pop { animation: imagePop 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes scan {
+          0% { top: 0%; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+        @keyframes progress {
+          0% { width: 5%; }
+          50% { width: 80%; }
+          100% { width: 95%; }
+        }
       `}</style>
 
       <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto py-4 max-w-5xl mx-auto w-full">
@@ -291,7 +374,19 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
                 <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-xs">✨</div>
                 <div className="flex flex-col gap-2 max-w-sm">
                   <div className="image-pop rounded-2xl overflow-hidden border border-zinc-200 dark:border-white/10 shadow-lg">
-                    <img src={imgUrl} alt={imgPrompt} className="w-full object-cover" onError={(e) => { e.target.style.display = 'none'; }} />
+                    <img
+                      src={imgUrl}
+                      alt={imgPrompt}
+                      className="w-full object-cover"
+                      crossOrigin="anonymous"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                      }}
+                    />
+                    <p style={{ display: 'none' }} className="text-xs text-red-400 p-3 text-center">
+                      ⚠️ Image load nahi hui — download try karo
+                    </p>
                   </div>
                   <p className="text-xs text-zinc-400 px-1">✨ "{imgPrompt}"</p>
                   <a href={imgUrl} download={`setrxai-${Date.now()}.jpg`} className="flex items-center gap-1.5 text-xs text-purple-500 hover:text-purple-400 px-1 transition-colors">
@@ -309,7 +404,6 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
         {imgLoading && <ImageGeneratingAnimation />}
       </div>
 
-      {/* Image prompt bar */}
       {showImagePrompt && (
         <div className="px-3 sm:px-4 pb-2 max-w-5xl mx-auto w-full">
           <div className="flex items-center gap-2 bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/30 rounded-2xl px-3 py-2 animate-fadeInUp">
@@ -319,101 +413,4 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
               autoFocus
               value={imagePromptText}
               onChange={(e) => setImagePromptText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') generateImage(); if (e.key === 'Escape') setShowImagePrompt(false); }}
-              placeholder="Describe the image you want..."
-              className="flex-1 bg-transparent text-sm outline-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
-            />
-            <button onClick={() => generateImage()} disabled={!imagePromptText.trim()} className="shrink-0 px-3 py-1 rounded-lg bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white text-xs font-semibold disabled:opacity-40 transition-all hover:scale-105">
-              Generate
-            </button>
-            <button onClick={() => setShowImagePrompt(false)} className="shrink-0 text-zinc-400 hover:text-zinc-600">
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="p-3 sm:p-4">
-        <div className="max-w-5xl mx-auto">
-          {imagePreview && (
-            <div className="mb-2 relative inline-block">
-              <img src={imagePreview.previewUrl} alt="preview" className="h-20 rounded-lg border border-zinc-300 dark:border-white/10 shadow-md" />
-              <button onClick={() => setImagePreview(null)} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center">
-                <X size={12} />
-              </button>
-            </div>
-          )}
-          {parsingFile && (
-            <div className="mb-2 flex items-center gap-2 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-xs">
-              <FileText size={16} className="text-purple-500 animate-pulse" />
-              <span className="text-zinc-500">Reading file...</span>
-            </div>
-          )}
-          {attachedFile && !parsingFile && (
-            <div className="mb-2 flex items-center gap-2 bg-white dark:bg-white/[0.06] border border-purple-200 dark:border-purple-500/20 rounded-xl px-3 py-2 text-xs">
-              <FileText size={15} className="text-purple-500 shrink-0" />
-              <span className="truncate flex-1 text-zinc-700 dark:text-zinc-300">{attachedFile.name}</span>
-              <button onClick={() => { setAttachedFile(null); setFileError(''); }} className="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center">
-                <X size={12} />
-              </button>
-            </div>
-          )}
-          {fileError && <div className="mb-2 text-xs text-red-500">⚠️ {fileError}</div>}
-
-          <div className="flex items-center gap-1 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-2xl px-2 py-1.5 shadow-lg backdrop-blur-sm focus-within:ring-2 focus-within:ring-purple-500/40 relative">
-            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageSelect} className="hidden" />
-            <input type="file" accept=".pdf,.docx,.txt,.csv,.js,.jsx,.ts,.tsx,.py,.json,.md,.html,.css,.java,.c,.cpp,.xml,.yml,.yaml,.log" ref={docInputRef} onChange={handleDocSelect} className="hidden" />
-
-            {/* Plus button */}
-            <div className="relative" ref={plusMenuRef}>
-              <button
-                onClick={() => setShowPlusMenu((o) => !o)}
-                className={`shrink-0 p-2.5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ${showPlusMenu ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-600' : 'text-zinc-500 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-500/10'}`}
-                title="More options"
-              >
-                <Plus size={20} strokeWidth={2} className={`transition-transform duration-200 ${showPlusMenu ? 'rotate-45' : ''}`} />
-              </button>
-
-              {showPlusMenu && (
-                <div className="absolute bottom-12 left-0 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-2xl shadow-2xl p-1.5 min-w-[180px] z-50 animate-fadeInUp">
-                  <button onClick={() => { fileInputRef.current?.click(); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
-                    <Paperclip size={16} className="text-purple-500" /> Attach Image
-                  </button>
-                  <button onClick={() => { docInputRef.current?.click(); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
-                    <FileText size={16} className="text-purple-500" /> Attach File
-                  </button>
-                  <button onClick={() => { setShowImagePrompt(true); setShowPlusMenu(false); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
-                    <Wand2 size={16} className="text-purple-500" /> Generate Image
-                  </button>
-                  <button onClick={() => { setInput((prev) => prev + ' search: '); setShowPlusMenu(false); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
-                    <Globe size={16} className="text-blue-500" /> Web Search
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your message..."
-              rows={1}
-              className="flex-1 resize-none bg-transparent text-zinc-900 dark:text-zinc-100 text-sm sm:text-base px-1 py-2 outline-none max-h-32"
-            />
-
-            <button onClick={toggleListening} className={`shrink-0 p-2.5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ${isListening ? 'text-red-500 bg-red-100 dark:bg-red-500/20 animate-pulse' : 'text-zinc-500 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-500/10'}`} title="Voice input">
-              <Mic size={20} strokeWidth={2} />
-            </button>
-
-            <button onClick={sendMessage} disabled={loading} className="bg-gradient-to-br from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-50 text-white rounded-xl p-2.5 transition-all duration-200 shrink-0 hover:scale-110 active:scale-95 shadow-md">
-              <Send size={20} strokeWidth={2} className={loading ? 'animate-pulse' : ''} />
-            </button>
-          </div>
-          <p className="text-[11px] text-zinc-400 text-center mt-1.5">
-            Press + for image generation, file upload & web search
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
+              onKeyDown={(e) => { if (e.key === 'Enter') generateImage(); if (e.key === 'Escape') setShowImagePrompt(fals
