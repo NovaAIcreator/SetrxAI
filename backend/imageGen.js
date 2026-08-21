@@ -31,20 +31,32 @@ function getKey() {
 }
 
 async function generateImageBuffer(prompt) {
-  const genAI = new GoogleGenerativeAI(getKey());
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash-preview-image-generation',
-  });
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
-  });
-  const parts = result.response.candidates[0].content.parts;
-  const imgPart = parts.find((p) => p.inlineData);
-  if (!imgPart) throw new Error('Image generate nahi hui');
-  const buffer = Buffer.from(imgPart.inlineData.data, 'base64');
-  const contentType = imgPart.inlineData.mimeType || 'image/png';
-  return { buffer, contentType };
+  let lastError;
+
+  for (let attempt = 0; attempt < KEYS.length; attempt++) {
+    try {
+      const genAI = new GoogleGenerativeAI(getKey());
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-2.0-flash-preview-image-generation',
+      });
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseModalities: ['IMAGE', 'TEXT'],
+        },
+      });
+      const parts = result.response.candidates[0].content.parts;
+      const imgPart = parts.find((p) => p.inlineData);
+      if (!imgPart) throw new Error('No image in response');
+      const buffer = Buffer.from(imgPart.inlineData.data, 'base64');
+      const contentType = imgPart.inlineData.mimeType || 'image/png';
+      return { buffer, contentType };
+    } catch (err) {
+      lastError = err;
+      console.error(`Key attempt ${attempt + 1} failed:`, err.message);
+    }
+  }
+  throw lastError;
 }
 
 module.exports = { generateImageBuffer };
