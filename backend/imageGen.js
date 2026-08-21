@@ -1,77 +1,45 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const ACCOUNTS = [
+  { id: process.env.CF_ACCOUNT_ID_1, token: process.env.CF_API_TOKEN_1 },
+  { id: process.env.CF_ACCOUNT_ID_2, token: process.env.CF_API_TOKEN_2 },
+  { id: process.env.CF_ACCOUNT_ID_3, token: process.env.CF_API_TOKEN_3 },
+  { id: process.env.CF_ACCOUNT_ID_4, token: process.env.CF_API_TOKEN_4 },
+].filter((a) => a.id && a.token);
 
-const KEYS = [
-  process.env.GEMINI_KEYS_1,
-  process.env.GEMINI_KEYS_2,
-  process.env.GEMINI_KEYS_3,
-  process.env.GEMINI_KEYS_4,
-  process.env.GEMINI_KEYS_5,
-  process.env.GEMINI_KEYS_6,
-  process.env.GEMINI_KEYS_7,
-  process.env.GEMINI_KEYS_8,
-  process.env.GEMINI_KEYS_9,
-  process.env.GEMINI_KEYS_10,
-  process.env.GEMINI_KEYS_11,
-  process.env.GEMINI_KEYS_12,
-  process.env.GEMINI_KEYS_13,
-  process.env.GEMINI_KEYS_14,
-  process.env.GEMINI_KEYS_15,
-  process.env.GEMINI_KEYS_16,
-  process.env.GEMINI_KEYS_17,
-  process.env.GEMINI_KEYS_18,
-  process.env.GEMINI_KEYS_19,
-  process.env.GEMINI_KEYS_20,
-].filter(Boolean);
-
-let idx = 0;
-function getKey() {
-  const key = KEYS[idx % KEYS.length];
-  idx++;
-  return key;
-}
+let cfIdx = 0;
 
 async function generateImageBuffer(prompt) {
-  if (KEYS.length === 0) {
-    throw new Error('No Gemini API keys configured');
-  }
+  if (ACCOUNTS.length === 0) throw new Error('No Cloudflare accounts configured');
 
   let lastError;
-  for (let attempt = 0; attempt < Math.min(KEYS.length, 3); attempt++) {
-    const key = getKey();
-    console.log(`Trying key attempt ${attempt + 1}, key starts with: ${key?.substring(0, 8)}`);
+  for (let i = 0; i < ACCOUNTS.length; i++) {
+    const acc = ACCOUNTS[cfIdx % ACCOUNTS.length];
+    cfIdx++;
     try {
-      const genAI = new GoogleGenerativeAI(key);
-      const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash-preview-image-generation',
-      });
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseModalities: ['IMAGE', 'TEXT'],
-        },
-      });
-
-      const candidates = result?.response?.candidates;
-      if (!candidates || candidates.length === 0) {
-        throw new Error('No candidates in response');
+      console.log(`Trying Cloudflare account ${cfIdx}...`);
+      const res = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${acc.id}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${acc.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ prompt, num_steps: 8 }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.errors?.[0]?.message || `HTTP ${res.status}`);
       }
-
-      const parts = candidates[0]?.content?.parts;
-      if (!parts) throw new Error('No parts in response');
-
-      const imgPart = parts.find((p) => p.inlineData);
-      if (!imgPart) throw new Error('No image part found');
-
-      const buffer = Buffer.from(imgPart.inlineData.data, 'base64');
-      const contentType = imgPart.inlineData.mimeType || 'image/png';
+      const buffer = Buffer.from(await res.arrayBuffer());
       console.log('Image generated successfully!');
-      return { buffer, contentType };
+      return { buffer, contentType: 'image/jpeg' };
     } catch (err) {
-      console.error(`Attempt ${attempt + 1} failed:`, err.message);
+      console.error(`Account ${i + 1} failed:`, err.message);
       lastError = err;
     }
   }
-  throw lastError || new Error('Image generation failed');
+  throw lastError || new Error('All accounts failed');
 }
 
 module.exports = { generateImageBuffer };
