@@ -31,11 +31,16 @@ function getKey() {
 }
 
 async function generateImageBuffer(prompt) {
-  let lastError;
+  if (KEYS.length === 0) {
+    throw new Error('No Gemini API keys configured');
+  }
 
-  for (let attempt = 0; attempt < KEYS.length; attempt++) {
+  let lastError;
+  for (let attempt = 0; attempt < Math.min(KEYS.length, 3); attempt++) {
+    const key = getKey();
+    console.log(`Trying key attempt ${attempt + 1}, key starts with: ${key?.substring(0, 8)}`);
     try {
-      const genAI = new GoogleGenerativeAI(getKey());
+      const genAI = new GoogleGenerativeAI(key);
       const model = genAI.getGenerativeModel({
         model: 'gemini-2.0-flash-preview-image-generation',
       });
@@ -45,18 +50,28 @@ async function generateImageBuffer(prompt) {
           responseModalities: ['IMAGE', 'TEXT'],
         },
       });
-      const parts = result.response.candidates[0].content.parts;
+
+      const candidates = result?.response?.candidates;
+      if (!candidates || candidates.length === 0) {
+        throw new Error('No candidates in response');
+      }
+
+      const parts = candidates[0]?.content?.parts;
+      if (!parts) throw new Error('No parts in response');
+
       const imgPart = parts.find((p) => p.inlineData);
-      if (!imgPart) throw new Error('No image in response');
+      if (!imgPart) throw new Error('No image part found');
+
       const buffer = Buffer.from(imgPart.inlineData.data, 'base64');
       const contentType = imgPart.inlineData.mimeType || 'image/png';
+      console.log('Image generated successfully!');
       return { buffer, contentType };
     } catch (err) {
+      console.error(`Attempt ${attempt + 1} failed:`, err.message);
       lastError = err;
-      console.error(`Key attempt ${attempt + 1} failed:`, err.message);
     }
   }
-  throw lastError;
+  throw lastError || new Error('Image generation failed');
 }
 
 module.exports = { generateImageBuffer };
