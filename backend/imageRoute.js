@@ -21,7 +21,7 @@ router.post('/generate-image', softAuth, async (req, res) => {
   try {
     const { buffer, contentType } = await generateImageBuffer(prompt.trim());
     const saved = await saveImage({ userId: req.userId, prompt: prompt.trim(), buffer, contentType });
-    const imageUrl = `${req.protocol}://${req.get('host')}/api/image/${saved.id}`;
+    const imageUrl = `https://setrxai-backend.onrender.com/api/image/${saved.id}`;
     res.json({ imageUrl, id: saved.id });
   } catch (err) {
     console.error('Image generation failed (dono providers try kiye):', err.message);
