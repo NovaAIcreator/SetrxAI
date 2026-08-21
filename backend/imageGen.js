@@ -24,7 +24,7 @@ async function generateImageBuffer(prompt) {
             Authorization: `Bearer ${acc.token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ prompt, num_steps: 8 }),
+          body: JSON.stringify({ prompt }),
         }
       );
       if (!res.ok) {
