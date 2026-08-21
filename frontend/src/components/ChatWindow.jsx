@@ -7,13 +7,34 @@ import ModeHero from './ModeHero';
 import { api } from '../api';
 
 function TypingDots() {
+  const [step, setStep] = useState(0);
+  const steps = [
+    'Thinking',
+    'Analyzing your question',
+    'Reasoning deeply',
+    'Checking facts',
+    'Crafting response',
+  ];
+
+  useEffect(() => {
+    const t = setInterval(() => setStep((p) => (p + 1) % steps.length), 1800);
+    return () => clearInterval(t);
+  }, []);
+
   return (
     <div className="flex gap-2 sm:gap-3 justify-start mb-4 px-2 sm:px-4">
       <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-xs animate-pulse">✨</div>
-      <div className="flex items-center gap-1.5 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-2xl rounded-bl-md px-4 py-3.5">
-        <span className="w-2 h-2 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '0s' }} />
-        <span className="w-2 h-2 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '0.2s' }} />
-        <span className="w-2 h-2 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '0.4s' }} />
+      <div className="flex items-center gap-2 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-2xl rounded-bl-md px-3.5 py-2.5 max-w-[280px]">
+        <div className="relative w-3.5 h-3.5 shrink-0">
+          <div className="absolute inset-0 rounded-full border-2 border-purple-500/30" />
+          <div className="absolute inset-0 rounded-full border-2 border-t-purple-500 animate-spin" />
+        </div>
+        <span className="text-sm text-zinc-600 dark:text-zinc-300 truncate">{steps[step]}</span>
+        <span className="flex gap-0.5 shrink-0">
+          <span className="w-1 h-1 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '0s' }} />
+          <span className="w-1 h-1 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '0.15s' }} />
+          <span className="w-1 h-1 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '0.3s' }} />
+        </span>
       </div>
     </div>
   );
@@ -69,64 +90,30 @@ function ImageGeneratingAnimation() {
 }
 
 function WebSearchAnimation() {
-  const [dots, setDots] = useState('');
   const [step, setStep] = useState(0);
   const steps = [
-    'Connecting to search engines...',
-    'Scanning web sources...',
-    'Filtering relevant results...',
-    'Extracting key insights...',
-    'Compiling answer...',
+    'Searching the web',
+    'Reading sources',
+    'Analyzing results',
+    'Preparing answer',
   ];
-  const sources = ['Google', 'News', 'Wikipedia', 'Live data'];
 
   useEffect(() => {
-    const d = setInterval(() => setDots((p) => (p.length >= 3 ? '' : p + '.')), 400);
-    const s = setInterval(() => setStep((p) => (p + 1) % steps.length), 1800);
-    return () => { clearInterval(d); clearInterval(s); };
+    const t = setInterval(() => setStep((p) => (p + 1) % steps.length), 1600);
+    return () => clearInterval(t);
   }, []);
 
   return (
     <div className="flex gap-2 sm:gap-3 justify-start mb-4 px-2 sm:px-4">
-      <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-xs animate-pulse">🌐</div>
-      <div className="flex flex-col gap-2.5 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-2xl rounded-bl-md px-4 py-3.5 min-w-[260px] max-w-xs">
-        <div className="flex items-center gap-2">
-          <Globe size={14} className="text-blue-500 animate-spin" style={{ animationDuration: '2s' }} />
-          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">Web Search</span>
-          <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-500 font-medium">LIVE</span>
-        </div>
-        <div className="relative h-16 rounded-xl overflow-hidden bg-gradient-to-br from-blue-900/10 to-cyan-900/10 border border-blue-500/20 flex items-center justify-center">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-10 h-10 rounded-full border border-blue-500/30 animate-ping" />
-            <div className="absolute w-6 h-6 rounded-full border border-cyan-400/40 animate-ping" style={{ animationDelay: '0.4s' }} />
-            <div className="absolute w-3 h-3 rounded-full bg-blue-500/60 animate-pulse" />
-          </div>
-          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-blue-500 to-transparent"
-            style={{ animation: 'scan 2s ease-in-out infinite' }} />
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
-            ))}
-          </div>
-          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">{steps[step]}{dots}</span>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {sources.map((s, i) => (
-            <span
-              key={s}
-              className="text-[10px] px-2 py-0.5 rounded-full border border-blue-500/20 text-blue-500/80 bg-blue-500/5"
-              style={{ opacity: step >= i ? 1 : 0.35, transition: 'opacity 0.4s' }}
-            >
-              {s}
-            </span>
-          ))}
-        </div>
-        <div className="relative h-1 bg-zinc-100 dark:bg-white/10 rounded-full overflow-hidden">
-          <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-400 rounded-full"
-            style={{ animation: 'progress 3s ease-in-out infinite' }} />
-        </div>
+      <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-xs">🌐</div>
+      <div className="flex items-center gap-2 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-2xl rounded-bl-md px-3.5 py-2.5">
+        <Globe size={13} className="text-blue-500 animate-spin shrink-0" style={{ animationDuration: '1.8s' }} />
+        <span className="text-sm text-zinc-600 dark:text-zinc-300">{steps[step]}</span>
+        <span className="flex gap-0.5">
+          <span className="w-1 h-1 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0s' }} />
+          <span className="w-1 h-1 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0.15s' }} />
+          <span className="w-1 h-1 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0.3s' }} />
+        </span>
       </div>
     </div>
   );
@@ -378,7 +365,7 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
                       src={imgUrl}
                       alt={imgPrompt}
                       className="w-full object-cover"
-                      crossOrigin="anonymous"
+                      referrerPolicy="no-referrer"
                       onError={(e) => {
                         e.target.style.display = 'none';
                         if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
@@ -435,78 +422,4 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
               <button onClick={() => setImagePreview(null)} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center">
                 <X size={12} />
               </button>
-            </div>
-          )}
-          {parsingFile && (
-            <div className="mb-2 flex items-center gap-2 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-xl px-3 py-2.5 text-xs">
-              <FileText size={16} className="text-purple-500 animate-pulse" />
-              <span className="text-zinc-500">Reading file...</span>
-            </div>
-          )}
-          {attachedFile && !parsingFile && (
-            <div className="mb-2 flex items-center gap-2 bg-white dark:bg-white/[0.06] border border-purple-200 dark:border-purple-500/20 rounded-xl px-3 py-2 text-xs">
-              <FileText size={15} className="text-purple-500 shrink-0" />
-              <span className="truncate flex-1 text-zinc-700 dark:text-zinc-300">{attachedFile.name}</span>
-              <button onClick={() => { setAttachedFile(null); setFileError(''); }} className="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center">
-                <X size={12} />
-              </button>
-            </div>
-          )}
-          {fileError && <div className="mb-2 text-xs text-red-500">⚠️ {fileError}</div>}
-
-          <div className="flex items-center gap-1 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-2xl px-2 py-1.5 shadow-lg backdrop-blur-sm focus-within:ring-2 focus-within:ring-purple-500/40 relative">
-            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageSelect} className="hidden" />
-            <input type="file" accept=".pdf,.docx,.txt,.csv,.js,.jsx,.ts,.tsx,.py,.json,.md,.html,.css,.java,.c,.cpp,.xml,.yml,.yaml,.log" ref={docInputRef} onChange={handleDocSelect} className="hidden" />
-
-            <div className="relative" ref={plusMenuRef}>
-              <button
-                onClick={() => setShowPlusMenu((o) => !o)}
-                className={`shrink-0 p-2.5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ${showPlusMenu ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-600' : 'text-zinc-500 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-500/10'}`}
-                title="More options"
-              >
-                <Plus size={20} strokeWidth={2} className={`transition-transform duration-200 ${showPlusMenu ? 'rotate-45' : ''}`} />
-              </button>
-
-              {showPlusMenu && (
-                <div className="absolute bottom-12 left-0 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-2xl shadow-2xl p-1.5 min-w-[180px] z-50 animate-fadeInUp">
-                  <button onClick={() => { fileInputRef.current?.click(); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
-                    <Paperclip size={16} className="text-purple-500" /> Attach Image
-                  </button>
-                  <button onClick={() => { docInputRef.current?.click(); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
-                    <FileText size={16} className="text-purple-500" /> Attach File
-                  </button>
-                  <button onClick={() => { setShowImagePrompt(true); setShowPlusMenu(false); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
-                    <Wand2 size={16} className="text-purple-500" /> Generate Image
-                  </button>
-                  <button onClick={() => { setInput((prev) => prev + ' search: '); setShowPlusMenu(false); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
-                    <Globe size={16} className="text-blue-500" /> Web Search
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your message..."
-              rows={1}
-              className="flex-1 resize-none bg-transparent text-zinc-900 dark:text-zinc-100 text-sm sm:text-base px-1 py-2 outline-none max-h-32"
-            />
-
-            <button onClick={toggleListening} className={`shrink-0 p-2.5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ${isListening ? 'text-red-500 bg-red-100 dark:bg-red-500/20 animate-pulse' : 'text-zinc-500 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-500/10'}`} title="Voice input">
-              <Mic size={20} strokeWidth={2} />
-            </button>
-
-            <button onClick={sendMessage} disabled={loading} className="bg-gradient-to-br from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-50 text-white rounded-xl p-2.5 transition-all duration-200 shrink-0 hover:scale-110 active:scale-95 shadow-md">
-              <Send size={20} strokeWidth={2} className={loading ? 'animate-pulse' : ''} />
-            </button>
-          </div>
-          <p className="text-[11px] text-zinc-400 text-center mt-1.5">
-            Press + for image generation, file upload & web search
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
+     
