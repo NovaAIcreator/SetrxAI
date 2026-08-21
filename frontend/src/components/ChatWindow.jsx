@@ -178,9 +178,7 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
           role: 'assistant',
           content: `
 
-![Generated Image](${data.imageUrl})
-
-\n\n✨ **"${prompt}"** — image ready hai!`,
+content: `<img src="${data.imageUrl}" alt="Generated Image" style="max-width:100%;border-radius:12px;" />\n\n✨ **"${prompt}"** — image ready hai!`,
         },
       ]);
     } catch (err) {
