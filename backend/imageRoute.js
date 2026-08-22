@@ -1,9 +1,3 @@
-// imageRoute.js
-// Manual "Generate Image" endpoint + Gallery endpoints (list/search/delete).
-// Images ab Postgres mein persist hoti hain (imagesDb.js), isliye guest ke
-// generate kiye images kaam karte hain (URL turant milti hai) lekin gallery
-// list/search sirf logged-in users ke liye hai (unhi ki images dikhengi).
-
 const express = require('express');
 const router = express.Router();
 const { generateImageBuffer } = require('./imageGen');
@@ -12,20 +6,36 @@ const softAuth = require('./softAuth');
 const authMiddleware = require('./authMiddleware');
 
 router.post('/generate-image', softAuth, async (req, res) => {
-  const { prompt } = req.body;
+  const { prompt, image } = req.body;
+  const hasImage = !!(image && image.data);
+  const text = (prompt || '').trim();
 
-  if (!prompt || !prompt.trim()) {
-    return res.status(400).json({ error: 'Prompt required' });
+  if (!text && !hasImage) {
+    return res.status(400).json({ error: 'Prompt or photo required' });
   }
 
   try {
-    const { buffer, contentType } = await generateImageBuffer(prompt.trim());
-    const saved = await saveImage({ userId: req.userId, prompt: prompt.trim(), buffer, contentType });
-    const imageUrl = `https://setrxai-backend.onrender.com/api/image/${saved.id}`;
-    res.json({ imageUrl, id: saved.id });
+    const { buffer, contentType } = await generateImageBuffer(
+      text || 'make this photo high quality, sharp and natural',
+      hasImage ? image : null
+    );
+    const saved = await saveImage({
+      userId: req.userId,
+      prompt: text || 'photo edit',
+      buffer,
+      contentType,
+    });
+    const imageUrl = 'https://setrxai-backend.onrender.com/api/image/' + saved.id;
+    res.json({
+      imageUrl,
+      id: saved.id,
+      mode: hasImage ? 'edit' : 'generate',
+    });
   } catch (err) {
-    console.error('Image generation failed (dono providers try kiye):', err.message);
-    res.status(503).json({ error: 'Image generate nahi ho payi — image services abhi unavailable hain, thodi der baad try karo' });
+    console.error('Image generation failed:', err.message);
+    res.status(503).json({
+      error: 'Image generate nahi ho payi — image services abhi unavailable hain, thodi der baad try karo',
+    });
   }
 });
 
@@ -37,6 +47,7 @@ router.get('/image/:id', async (req, res) => {
     }
     res.setHeader('Content-Type', entry.content_type);
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(entry.image_data);
   } catch (err) {
     console.error('Image fetch error:', err.message);
@@ -44,7 +55,6 @@ router.get('/image/:id', async (req, res) => {
   }
 });
 
-// ---- Gallery: sirf logged-in users ke liye (search bhi 'query' param se) ----
 router.get('/images', authMiddleware, async (req, res) => {
   try {
     const { query = '', limit = 30, offset = 0 } = req.query;
@@ -59,7 +69,7 @@ router.get('/images', authMiddleware, async (req, res) => {
         id: img.id,
         prompt: img.prompt,
         createdAt: img.created_at,
-        url: `${req.protocol}://${req.get('host')}/api/image/${img.id}`,
+        url: req.protocol + '://' + req.get('host') + '/api/image/' + img.id,
       }))
     );
   } catch (err) {
