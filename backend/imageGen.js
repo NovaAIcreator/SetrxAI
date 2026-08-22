@@ -15,27 +15,36 @@ async function generateImageBuffer(prompt) {
     const acc = ACCOUNTS[cfIdx % ACCOUNTS.length];
     cfIdx++;
     try {
-      console.log(`Trying Cloudflare account ${cfIdx}...`);
+      console.log('Trying Cloudflare account ' + (i + 1) + '...');
       const res = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${acc.id}/ai/run/@cf/black-forest-labs/flux-1-schnell`,
+        'https://api.cloudflare.com/client/v4/accounts/' + acc.id + '/ai/run/@cf/black-forest-labs/flux-1-schnell',
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${acc.token}`,
+            Authorization: 'Bearer ' + acc.token,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ prompt }),
         }
       );
+
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.errors?.[0]?.message || `HTTP ${res.status}`);
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err.errors && err.errors[0] && err.errors[0].message) || ('HTTP ' + res.status));
       }
-      const buffer = Buffer.from(await res.arrayBuffer());
+
+      // Cloudflare Flux returns JSON: { result: { image: "<base64>" } }
+      const json = await res.json();
+      const base64 = (json.result && json.result.image) || json.image;
+      if (!base64 || typeof base64 !== 'string') {
+        throw new Error('No base64 image in Cloudflare response');
+      }
+
+      const buffer = Buffer.from(base64, 'base64');
       console.log('Image generated successfully!');
       return { buffer, contentType: 'image/jpeg' };
     } catch (err) {
-      console.error(`Account ${i + 1} failed:`, err.message);
+      console.error('Account ' + (i + 1) + ' failed:', err.message);
       lastError = err;
     }
   }
