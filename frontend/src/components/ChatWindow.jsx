@@ -417,4 +417,35 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
                   <button onClick={() => { setShowImagePrompt(true); setShowPlusMenu(false); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
                     <Wand2 size={16} className="text-purple-500" /> Generate Image
                   </button>
-                  <button onClick={() => { setInput((prev) => prev + ' search: '); setShowPlusMenu(false); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-
+                  <button onClick={() => { setInput((prev) => prev + ' search: '); setShowPlusMenu(false); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
+                    <Globe size={16} className="text-blue-500" /> Web Search
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type your message..."
+              rows={1}
+              className="flex-1 resize-none bg-transparent text-zinc-900 dark:text-zinc-100 text-sm sm:text-base px-1 py-2 outline-none max-h-32"
+            />
+
+            <button onClick={toggleListening} className={`shrink-0 p-2.5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ${isListening ? 'text-red-500 bg-red-100 dark:bg-red-500/20 animate-pulse' : 'text-zinc-500 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-500/10'}`} title="Voice input">
+              <Mic size={20} strokeWidth={2} />
+            </button>
+
+            <button onClick={sendMessage} disabled={loading} className="bg-gradient-to-br from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-50 text-white rounded-xl p-2.5 transition-all duration-200 shrink-0 hover:scale-110 active:scale-95 shadow-md">
+              <Send size={20} strokeWidth={2} className={loading ? 'animate-pulse' : ''} />
+            </button>
+          </div>
+          <p className="text-[11px] text-zinc-400 text-center mt-1.5">
+            Press + for image generation, file upload & web search
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
