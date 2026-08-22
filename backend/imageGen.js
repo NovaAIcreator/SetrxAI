@@ -168,7 +168,6 @@ async function generateImageBuffer(prompt, image) {
   return runOnAccounts('@cf/black-forest-labs/flux-1-schnell', {
     prompt: fluxPrompt,
     steps: 8,
-    seed: Math.floor(Math.random() * 1000000),
   });
 }
 
