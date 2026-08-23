@@ -15,13 +15,47 @@ function isCapacityError(msg) {
   return /capacity temporarily exceeded|rate limit|429|503/i.test(msg || '');
 }
 
+// Hinglish → clear English (van = vehicle, not forest)
+function translateHinglish(raw) {
+  let t = ' ' + (raw || '').trim() + ' ';
+
+  const map = [
+    [/\bvan\b/gi, ' cargo van vehicle '],
+    [/\bvans\b/gi, ' cargo van vehicles '],
+    [/gaadi|gadi|car\b/gi, ' car '],
+    [/bike|motorcycle|pulser|pulsar/gi, ' motorcycle '],
+    [/scooty|scooter/gi, ' scooter '],
+    [/banda|aadmi|insaan|person|man\b/gi, ' a man '],
+    [/ladki|aurat|woman|girl/gi, ' a woman '],
+    [/banao|bana do|bana dena|generate|draw|create/gi, ' '],
+    [/ek\s+/gi, ' one '],
+    [/ki\s+/gi, ' '],
+    [/ka\s+/gi, ' '],
+    [/colour|color/gi, ' color '],
+    [/red color|red colour/gi, ' red colored '],
+    [/road pe|road pr|sarak/gi, ' on a road '],
+    [/empty|khali|bina banda|no person|without person/gi, ' empty, no people inside or outside '],
+    [/chal raha|chal rha|walking|paidal/gi, ' walking on foot '],
+    [/phone|mobile/gi, ' smartphone '],
+  ];
+
+  map.forEach(function (pair) {
+    t = t.replace(pair[0], pair[1]);
+  });
+
+  return t.replace(/\s+/g, ' ').trim();
+}
+
 function enhancePrompt(userPrompt) {
-  const p = (userPrompt || '').trim();
+  const original = (userPrompt || '').trim();
+  const translated = translateHinglish(original);
+
   return (
-    'Photorealistic image. Show ONLY what is asked. ' +
-    'Do not add people, faces, or extra objects unless the user asked for them. ' +
-    'Subject: ' + p +
-    '. Sharp focus, natural lighting, high detail, clean composition.'
+    'Photorealistic photograph of: ' + translated + '. ' +
+    'Show ONLY this subject. Do not add unrelated objects. ' +
+    'If it is a vehicle, show the vehicle clearly, not a forest or landscape. ' +
+    'Sharp focus, natural lighting, high detail. ' +
+    'Original request: ' + original
   );
 }
 
@@ -34,12 +68,12 @@ function enhanceEditPrompt(userPrompt) {
 
   if (wantsEnhance) {
     return (
-      'Improve this photo: sharper details, better lighting, cleaner quality. ' +
-      'Keep the SAME subject, pose, and background. Do not add new people or objects. ' +
-      (p ? 'Extra request: ' + p : '')
+      'Improve this photo: sharper, better lighting, cleaner quality. ' +
+      'Keep the SAME subject and background. Do not add new people or objects. ' +
+      (p ? 'Request: ' + translateHinglish(p) : '')
     );
   }
-  return 'Edit this photo as requested. Keep the main subject unless asked to change it. Request: ' + p;
+  return 'Edit this photo. Request: ' + translateHinglish(p) + '. Keep main subject unless asked to change.';
 }
 
 async function parseResponse(res) {
@@ -52,7 +86,7 @@ async function parseResponse(res) {
       json.image ||
       (json.result && typeof json.result === 'string' ? json.result : null);
     if (!base64 || typeof base64 !== 'string') {
-      throw new Error('No image in response: ' + JSON.stringify(json).slice(0, 200));
+      throw new Error('No image in response');
     }
     const clean = base64.replace(/^data:image\/\w+;base64,/, '');
     return { buffer: Buffer.from(clean, 'base64'), contentType: 'image/jpeg' };
@@ -60,33 +94,36 @@ async function parseResponse(res) {
 
   const buffer = Buffer.from(await res.arrayBuffer());
   if (!buffer.length) throw new Error('Empty image response');
-  const type = contentType.includes('png') ? 'image/png' : 'image/jpeg';
-  return { buffer, contentType: type };
+  return {
+    buffer,
+    contentType: contentType.includes('png') ? 'image/png' : 'image/jpeg',
+  };
 }
 
-async function runFlux2(prompt, imageBuffer, retries) {
+// flux-2-klein-9b = fast + good quality (\~8–15 sec)
+async function runFluxKlein(prompt, imageBuffer, retries) {
   if (ACCOUNTS.length === 0) throw new Error('No Cloudflare accounts configured');
 
   let lastError;
-  const maxRetries = retries == null ? 2 : retries;
+  const maxRetries = retries == null ? 1 : retries;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
       console.log('Retry ' + attempt + '...');
-      await sleep(2000 * attempt);
+      await sleep(1500 * attempt);
     }
 
     for (let i = 0; i < ACCOUNTS.length; i++) {
       const acc = ACCOUNTS[cfIdx % ACCOUNTS.length];
       cfIdx++;
       try {
-        console.log('Trying account ' + (i + 1) + ' flux-2-dev...');
+        console.log('Trying account ' + (i + 1) + ' flux-2-klein-9b...');
 
         const form = new FormData();
         form.append('prompt', prompt);
-        form.append('steps', '20');
         form.append('width', '1024');
         form.append('height', '1024');
+        // klein-9b: steps fixed at 4, mat bhejo
 
         if (imageBuffer && imageBuffer.length) {
           form.append(
@@ -97,7 +134,9 @@ async function runFlux2(prompt, imageBuffer, retries) {
         }
 
         const res = await fetch(
-          'https://api.cloudflare.com/client/v4/accounts/' + acc.id + '/ai/run/@cf/black-forest-labs/flux-2-dev',
+          'https://api.cloudflare.com/client/v4/accounts/' +
+            acc.id +
+            '/ai/run/@cf/black-forest-labs/flux-2-klein-9b',
           {
             method: 'POST',
             headers: { Authorization: 'Bearer ' + acc.token },
@@ -114,7 +153,7 @@ async function runFlux2(prompt, imageBuffer, retries) {
         }
 
         const out = await parseResponse(res);
-        console.log('Image generated successfully (flux-2-dev)!');
+        console.log('Image OK (flux-2-klein-9b)');
         return out;
       } catch (err) {
         console.error('Account ' + (i + 1) + ' failed:', err.message);
@@ -129,22 +168,20 @@ async function runFlux2(prompt, imageBuffer, retries) {
 }
 
 async function generateImageBuffer(prompt, image) {
-  // Photo edit
   if (image && image.data) {
     const raw = String(image.data).replace(/^data:[^;]+;base64,/, '');
     const imgBuf = Buffer.from(raw, 'base64');
     try {
-      return await runFlux2(enhanceEditPrompt(prompt), imgBuf, 3);
+      return await runFluxKlein(enhanceEditPrompt(prompt), imgBuf, 2);
     } catch (err) {
       if (isCapacityError(err.message)) {
-        throw new Error('Image edit busy hai — 30–60 sec baad try karo.');
+        throw new Error('Image edit busy — 20–30 sec baad try karo.');
       }
       throw err;
     }
   }
 
-  // Normal generate
-  return runFlux2(enhancePrompt(prompt), null, 2);
+  return runFluxKlein(enhancePrompt(prompt), null, 1);
 }
 
 module.exports = { generateImageBuffer };
