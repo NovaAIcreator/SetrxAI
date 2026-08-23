@@ -1,40 +1,34 @@
-// gemini.js
-// Gemini API — naya 2.5-flash model + image (vision) support
-
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 async function callGemini(apiKey, messages, onChunk, imageData) {
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
-  const systemMsg = messages.find(m => m.role === 'system');
-  const otherMsgs = messages.filter(m => m.role !== 'system');
-
-  const history = otherMsgs.slice(0, -1).map(m => ({
+  const systemMsg = messages.find((m) => m.role === 'system');
+  const otherMsgs = messages.filter((m) => m.role !== 'system');
+  const history = otherMsgs.slice(0, -1).map((m) => ({
     role: m.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: m.content }],
   }));
-
   const lastMessage = otherMsgs[otherMsgs.length - 1]?.content || '';
-
   const chat = model.startChat({
-  history,
-  systemInstruction: systemMsg
-    ? {
-        role: "system",
-        parts: [{ text: systemMsg.content }]
-      }
-    : undefined,
-});
-  const messageParts = imageData
-    ? [
-        { text: lastMessage },
-        { inlineData: { mimeType: imageData.mimeType, data: imageData.data } },
-      ]
-    : lastMessage;
+    history,
+    systemInstruction: systemMsg ? { role: 'system', parts: [{ text: systemMsg.content }] } : undefined,
+  });
+  const imgs = Array.isArray(imageData) ? imageData : imageData ? [imageData] : [];
+  let parts;
+  if (imgs.length) {
+    parts = [{ text: lastMessage || 'Analyze these images.' }];
+    imgs.slice(0, 4).forEach((img) => {
+      parts.push({
+        inlineData: {
+          mimeType: img.mimeType || 'image/jpeg',
+          data: String(img.data).replace(/^data:[^;]+;base64,/, ''),
+        },
+      });
+    });
+  } else parts = lastMessage;
 
-  const result = await chat.sendMessageStream(messageParts);
-
+  const result = await chat.sendMessageStream(parts);
   let fullText = '';
   for await (const chunk of result.stream) {
     const text = chunk.text();
@@ -43,8 +37,6 @@ async function callGemini(apiKey, messages, onChunk, imageData) {
       if (onChunk) onChunk(text);
     }
   }
-
   return { content: fullText };
 }
-
 module.exports = { callGemini };
