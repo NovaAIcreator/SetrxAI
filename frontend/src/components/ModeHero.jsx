@@ -1,80 +1,73 @@
-// frontend/src/components/ModeHero.jsx — NEW FILE
+// ModeHero.jsx — clean Claude / ChatGPT style empty state
 
-const config = {
-  study: {
-    icon: '🎓', title: 'Study Assistant',
-    sub: 'Homework, exam prep, science, math — sab kuch',
-    color: 'from-violet-500 to-purple-600',
-    ring: 'ring-purple-500/30',
-    chipColor: 'hover:border-purple-500 hover:text-purple-400',
-    chips: [
-      { label: '📐 Quadratic Equations', p: 'Explain quadratic equations with examples' },
-      { label: '🌿 Photosynthesis', p: 'Explain photosynthesis in simple words' },
-      { label: '🌍 World War 2', p: 'Summarize World War 2 in key points' },
-      { label: '📝 Exam Tips', p: 'Give me best tips for exam preparation' },
-      { label: '⚛️ Quantum Physics', p: 'What is quantum physics in simple words?' },
-      { label: '🧬 DNA vs RNA', p: 'Explain the difference between DNA and RNA' },
-    ],
-  },
-  coding: {
-    icon: '💻', title: 'Coding Assistant',
-    sub: 'Code likho, bugs fix karo, concepts samjho',
-    color: 'from-emerald-500 to-green-600',
-    ring: 'ring-emerald-500/30',
-    chipColor: 'hover:border-emerald-500 hover:text-emerald-400',
-    chips: [
-      { label: '🐍 Python Function', p: 'Write a Python function to reverse a string' },
-      { label: '⚡ JS Async/Await', p: 'Explain async/await in JavaScript with example' },
-      { label: '⚛️ React useEffect', p: 'How to use useEffect hook in React?' },
-      { label: '🗄️ SQL Query', p: 'Write SQL query to find duplicate rows' },
-      { label: '🎨 CSS Center Div', p: 'How to center a div in CSS — all methods' },
-      { label: '🔗 REST API', p: 'How to build a REST API in Node.js?' },
-    ],
-  },
-  general: {
-    icon: '🌟', title: 'General Assistant',
-    sub: 'Travel, recipes, advice, fun facts — kuch bhi poocho',
-    color: 'from-amber-500 to-orange-500',
-    ring: 'ring-amber-500/30',
-    chipColor: 'hover:border-amber-500 hover:text-amber-400',
-    chips: [
-      { label: '✈️ Japan Trip Plan', p: 'Plan a 7-day trip to Japan with budget tips' },
-      { label: '🥗 Weight Loss Meal', p: 'Give me a healthy 7-day meal plan for weight loss' },
-      { label: '💪 Home Workout', p: 'Give me a 30-day home workout plan without equipment' },
-      { label: '📈 Stock Market', p: 'Explain how the stock market works in simple words' },
-      { label: '✍️ Motivational Story', p: 'Write me a short motivational story' },
-      { label: '🤯 Random Fact', p: "Tell me an interesting fact I probably don't know" },
-    ],
-  },
+const SUGGESTIONS = {
+  general: [
+    { title: 'Explain simply', text: 'Quantum computing ko simple Hinglish me samjhao' },
+    { title: 'Plan my day', text: 'College student ke liye productive daily routine banao' },
+    { title: 'Write better', text: 'Is idea ko professional LinkedIn post bana do: AI se padhai' },
+    { title: 'Compare options', text: 'React vs Next.js — beginner ke liye kaunsa better, table me' },
+  ],
+  study: [
+    { title: 'Chapter notes', text: 'Photosynthesis ke complete exam notes banao' },
+    { title: 'Important Qs', text: 'Class 10 Light chapter ke important questions with answers' },
+    { title: 'Quick revision', text: 'Newton laws ka short revision sheet with examples' },
+    { title: 'Doubt clear', text: 'Ohm law confusion clear karo real life example se' },
+  ],
+  coding: [
+    { title: 'Build a site', text: 'Simple React + Tailwind landing page ka pura code do' },
+    { title: 'Fix my bug', text: 'React useEffect infinite loop kyun hota hai, example ke sath fix' },
+    { title: 'API route', text: 'Express me JWT login API ka complete code with file paths' },
+    { title: 'Explain code', text: 'async/await vs Promises — simple example ke sath' },
+  ],
+};
+
+const TITLES = {
+  general: 'How can I help you?',
+  study: 'What do you want to study?',
+  coding: 'What are you building?',
+};
+
+const SUBS = {
+  general: 'Ask anything — clear answers, no fluff.',
+  study: 'Notes, doubts, revision — exam-ready help.',
+  coding: 'Full files, real paths, production-style code.',
 };
 
 export default function ModeHero({ mode, onSelect }) {
-  const c = config[mode] || config.general;
+  const list = SUGGESTIONS[mode] || SUGGESTIONS.general;
+  const title = TITLES[mode] || TITLES.general;
+  const sub = SUBS[mode] || SUBS.general;
+
   return (
-    <div className="flex flex-col items-center justify-center h-full px-4 pb-4 animate-fadeInUp">
-      {/* Icon */}
-      <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${c.color} flex items-center justify-center text-3xl mb-4 shadow-lg ring-4 ${c.ring}`}>
-        {c.icon}
+    <div className="flex flex-col items-center justify-center min-h-[55vh] px-4 py-10">
+      <div className="w-12 h-12 rounded-2xl bg-zinc-900 dark:bg-white flex items-center justify-center mb-6 shadow-sm">
+        <span className="text-xl text-white dark:text-zinc-900">✨</span>
       </div>
-      {/* Title */}
-      <h2 className={`text-2xl font-bold bg-gradient-to-r ${c.color} bg-clip-text text-transparent mb-1`}>
-        SetrxAI {c.title}
-      </h2>
-      <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-6 text-center max-w-xs">
-        {c.sub}
+
+      <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 text-center mb-2">
+        {title}
+      </h1>
+      <p className="text-sm sm:text-[15px] text-zinc-500 dark:text-zinc-400 text-center max-w-md mb-10">
+        {sub}
       </p>
-      {/* Chips */}
-      <div className="grid grid-cols-2 gap-2 w-full max-w-md">
-        {c.chips.map((chip, i) => (
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full max-w-xl">
+        {list.map((item) => (
           <button
-            key={i}
-            onClick={() => onSelect(chip.p)}
-            className={`text-left text-xs px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/[0.04] text-zinc-600 dark:text-zinc-400 transition-all duration-200 hover:scale-105 active:scale-95 ${c.chipColor}`}
+            key={item.title}
+            type="button"
+            onClick={() => onSelect && onSelect(item.text)}
+            className="text-left rounded-2xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/[0.03] px-4 py-3.5 hover:bg-zinc-50 dark:hover:bg-white/[0.06] transition-colors group"
           >
-            {chip.label}
+            <div className="text-[13px] font-medium text-zinc-900 dark:text-zinc-100 mb-0.5 group-hover:text-zinc-700 dark:group-hover:text-white">
+              {item.title}
+            </div>
+            <div className="text-[12px] text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-snug">
+              {item.text}
+            </div>
           </button>
         ))}
       </div>
     </div>
   );
-  }
+    }
