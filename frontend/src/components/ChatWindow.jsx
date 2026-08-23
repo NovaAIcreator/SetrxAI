@@ -367,4 +367,161 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
     ? 'Photo attached — type "accha banao" to edit, or ask about it...'
     : forceImageGen
       ? 'Describe the image you want...'
-      : 'Type your message...';
+      : 'Type your message...'
+   return (
+    <div className="flex flex-col h-full min-h-0">
+      <style>{`
+        @keyframes imagePop { 0% { transform: scale(0.95); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        .image-pop { animation: imagePop 0.35s ease-out both; }
+      `}</style>
+
+      {lightbox && (
+        <div className="fixed inset-0 z-[80] bg-black/85 flex items-center justify-center p-4" onClick={function () { setLightbox(null); }}>
+          <img src={lightbox} alt="" className="max-w-full max-h-full rounded-xl object-contain" />
+        </div>
+      )}
+
+      <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto py-4 max-w-5xl mx-auto w-full">
+        {messages.length === 0 && <ModeHero mode={mode} onSelect={function (text) { setInput(text); }} />}
+
+        {displayMessages.map(function (msg, i) {
+          if (msg.role === 'assistant' && msg.content && msg.content.indexOf('__IMAGE__') === 0) {
+            const rest = msg.content.replace('__IMAGE__', '');
+            const splitAt = rest.indexOf('__PROMPT__');
+            const imgUrl = splitAt >= 0 ? rest.slice(0, splitAt) : rest;
+            const imgPrompt = splitAt >= 0 ? rest.slice(splitAt + 10) : '';
+            return (
+              <div key={i} className="flex gap-2 sm:gap-3 justify-start mb-4 px-2 sm:px-4">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-xs">✨</div>
+                <div className="flex flex-col gap-2 max-w-sm">
+                  <button type="button" className="image-pop rounded-2xl overflow-hidden border border-zinc-200 dark:border-white/10 shadow-lg text-left" onClick={function () { setLightbox(imgUrl); }}>
+                    <img
+                      src={imgUrl}
+                      alt={imgPrompt}
+                      className="w-full object-cover"
+                      referrerPolicy="no-referrer"
+                      onError={function (e) {
+                        e.target.style.display = 'none';
+                        if (e.target.nextSibling) e.target.nextSibling.style.display = 'block';
+                      }}
+                    />
+                    <p style={{ display: 'none' }} className="text-xs text-red-400 p-3 text-center">
+                      ⚠️ Image load nahi hui — download try karo
+                    </p>
+                  </button>
+                  {imgPrompt ? <p className="text-xs text-zinc-400 px-1">✨ "{imgPrompt}"</p> : null}
+                  <div className="flex flex-wrap gap-2 px-1">
+                    <a href={imgUrl} target="_blank" rel="noreferrer" className="text-xs text-purple-500 hover:text-purple-400">⬇️ Download</a>
+                    <button type="button" className="text-xs text-fuchsia-400 hover:text-fuchsia-300" onClick={function () { useImageForEdit(imgUrl); }}>✏️ Edit this</button>
+                    <button
+                      type="button"
+                      className="text-xs text-zinc-400 hover:text-zinc-200"
+                      onClick={function () {
+                        const job = lastImageJob.current;
+                        if (job) generateImage(job.prompt, job.photo);
+                        else generateImage(imgPrompt, null);
+                      }}
+                    >🔁 Again</button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          return <Message key={i} role={msg.role} content={msg.content} />;
+        })}
+
+        {waitingFirstChunk && !isSearching && <TypingDots />}
+        {isSearching && <WebSearchAnimation />}
+        {imgLoading && <ImageGeneratingAnimation editing={imgEditing} />}
+      </div>
+
+      <div className="p-3 sm:p-4">
+        <div className="max-w-5xl mx-auto">
+          {imagePreview && (
+            <div className="mb-2 flex items-end gap-2">
+              <div className="relative inline-block">
+                <img src={imagePreview.previewUrl} alt="preview" className="h-20 rounded-lg border border-zinc-300 dark:border-white/10 shadow-md" />
+                <button onClick={function () { setImagePreview(null); }} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center">
+                  <X size={12} />
+                </button>
+              </div>
+              <p className="text-[11px] text-zinc-400 pb-1">Send empty = improve photo · or type what to change</p>
+            </div>
+          )}
+          {parsingFile && (
+            <div className="mb-2 flex items-center gap-2 text-xs text-zinc-400">
+              <FileText size={14} className="text-purple-400 animate-pulse" />
+              <span className="italic">Reading file...</span>
+            </div>
+          )}
+          {attachedFile && !parsingFile && (
+            <div className="mb-2 flex items-center gap-2 bg-white dark:bg-white/[0.06] border border-purple-200 dark:border-purple-500/20 rounded-xl px-3 py-2 text-xs">
+              <FileText size={15} className="text-purple-500 shrink-0" />
+              <span className="truncate flex-1 text-zinc-700 dark:text-zinc-300">{attachedFile.name}</span>
+              <button onClick={function () { setAttachedFile(null); setFileError(''); }} className="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center">
+                <X size={12} />
+              </button>
+            </div>
+          )}
+          {fileError && <div className="mb-2 text-xs text-red-500">⚠️ {fileError}</div>}
+
+          <div className="flex items-center gap-1 bg-white dark:bg-white/[0.06] border border-zinc-200 dark:border-white/10 rounded-2xl px-2 py-1.5 shadow-lg backdrop-blur-sm focus-within:ring-2 focus-within:ring-purple-500/40 relative">
+            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageSelect} className="hidden" />
+            <input type="file" accept=".pdf,.docx,.txt,.csv,.js,.jsx,.ts,.tsx,.py,.json,.md,.html,.css,.java,.c,.cpp,.xml,.yml,.yaml,.log" ref={docInputRef} onChange={handleDocSelect} className="hidden" />
+
+            <div className="relative" ref={plusMenuRef}>
+              <button
+                onClick={function () { setShowPlusMenu(function (o) { return !o; }); }}
+                className={'shrink-0 p-2.5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ' + (showPlusMenu ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-600' : 'text-zinc-500 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-500/10')}
+                title="More options"
+              >
+                <Plus size={20} strokeWidth={2} className={'transition-transform duration-200 ' + (showPlusMenu ? 'rotate-45' : '')} />
+              </button>
+
+              {showPlusMenu && (
+                <div className="absolute bottom-12 left-0 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 rounded-2xl shadow-2xl p-1.5 min-w-[200px] z-50">
+                  <button onClick={function () { fileInputRef.current && fileInputRef.current.click(); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
+                    <Paperclip size={16} className="text-purple-500" /> Attach Image
+                  </button>
+                  <button onClick={function () { docInputRef.current && docInputRef.current.click(); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
+                    <FileText size={16} className="text-purple-500" /> Attach File
+                  </button>
+                  <button onClick={function () { setForceImageGen(true); setShowPlusMenu(false); setTimeout(function () { textareaRef.current && textareaRef.current.focus(); }, 50); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
+                    <Wand2 size={16} className="text-purple-500" /> Generate Image
+                  </button>
+                  <button onClick={function () { fileInputRef.current && fileInputRef.current.click(); setForceImageGen(true); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
+                    <Image size={16} className="text-fuchsia-500" /> Edit / Improve Photo
+                  </button>
+                  <button onClick={function () { setInput(function (prev) { return prev + ' search: '; }); setShowPlusMenu(false); }} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm text-zinc-700 dark:text-zinc-200 hover:bg-purple-50 dark:hover:bg-purple-500/10 transition-all">
+                    <Globe size={16} className="text-blue-500" /> Web Search
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={function (e) { setInput(e.target.value); }}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              rows={1}
+              className="flex-1 resize-none bg-transparent text-zinc-900 dark:text-zinc-100 text-sm sm:text-base px-1 py-2 outline-none max-h-32"
+            />
+
+            <button onClick={toggleListening} className={'shrink-0 p-2.5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ' + (isListening ? 'text-red-500 bg-red-100 dark:bg-red-500/20 animate-pulse' : 'text-zinc-500 hover:text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-500/10')} title="Voice input">
+              <Mic size={20} strokeWidth={2} />
+            </button>
+
+            <button onClick={sendMessage} disabled={loading || imgLoading} className="bg-gradient-to-br from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-50 text-white rounded-xl p-2.5 transition-all duration-200 shrink-0 hover:scale-110 active:scale-95 shadow-md">
+              <Send size={20} strokeWidth={2} className={(loading || imgLoading) ? 'animate-pulse' : ''} />
+            </button>
+          </div>
+          <p className="text-[11px] text-zinc-400 text-center mt-1.5">
+            Same chat: type to talk · attach photo to edit · "banao image" to generate
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
