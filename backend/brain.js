@@ -20,7 +20,12 @@ function fallback(userText, hasImage, mode) {
     return { thought: 'Live info chahiye — search', action: 'chat', provider: 'gemini', search: true };
   }
   return {
-    thought: mode === 'coding' ? 'Code carefully soch raha hoon' : mode === 'study' ? 'Concept clear kar raha hoon' : 'Jawab soch raha hoon',
+    thought:
+      mode === 'coding'
+        ? 'Code carefully soch raha hoon'
+        : mode === 'study'
+        ? 'Concept clear kar raha hoon'
+        : 'Jawab soch raha hoon',
     action: 'chat',
     provider: mode === 'general' ? 'groq' : 'gemini',
     search: false,
@@ -37,10 +42,14 @@ async function think({ userText, hasImage, hasFile, mode }) {
       generationConfig: { temperature: 0.1, maxOutputTokens: 120, responseMimeType: 'application/json' },
     });
     const r = await model.generateContent(
-      `Route this user message. Mode=\( {mode}. hasImage= \){!!hasImage}. hasFile=${!!hasFile}.
-Output ONLY JSON: {"thought":"Hinglish 8 words max what you are doing","action":"chat"|"vision"|"image","provider":"gemini"|"groq","search":false}
-Rules: photo+question=vision+gemini; code/study=gemini; casual=groq; image only if user wants picture made.
-User: ${userText || '(empty)'}`
+      'Route this user message. Mode=' +
+        mode +
+        '. hasImage=' +
+        !!hasImage +
+        '. hasFile=' +
+        !!hasFile +
+        '.\nOutput ONLY JSON: {"thought":"Hinglish 8 words max what you are doing","action":"chat"|"vision"|"image","provider":"gemini"|"groq","search":false}\nRules: photo+question=vision+gemini; code/study=gemini; casual=groq; image only if user wants picture made.\nUser: ' +
+        (userText || '(empty)')
     );
     const p = JSON.parse((r.response.text() || '').replace(/```json|```/g, '').trim());
     return {
@@ -54,7 +63,6 @@ User: ${userText || '(empty)'}`
   }
 }
 
-/** Double-check: coding/study answers */
 async function verifyAnswer(question, answer, mode) {
   if (mode !== 'coding' && mode !== 'study') return { ok: true };
   if (!answer || answer.length < 80) return { ok: true };
@@ -67,11 +75,13 @@ async function verifyAnswer(question, answer, mode) {
       generationConfig: { temperature: 0, maxOutputTokens: 2000, responseMimeType: 'application/json' },
     });
     const r = await model.generateContent(
-      `You verify an AI answer. Mode=${mode}.
-Question: ${question.slice(0, 500)}
-Answer: ${answer.slice(0, 6000)}
-JSON only: {"ok":true} OR {"ok":false,"fixed":"corrected full answer in same language/style"}
-Fix only if clear factual/code errors. If mostly fine, ok:true.`
+      'You verify an AI answer. Mode=' +
+        mode +
+        '.\nQuestion: ' +
+        String(question).slice(0, 500) +
+        '\nAnswer: ' +
+        String(answer).slice(0, 6000) +
+        '\nJSON only: {"ok":true} OR {"ok":false,"fixed":"corrected full answer in same language/style"}\nFix only if clear factual/code errors. If mostly fine, ok:true.'
     );
     const p = JSON.parse((r.response.text() || '').replace(/```json|```/g, '').trim());
     if (p.ok === false && p.fixed && p.fixed.length > 50) return { ok: false, fixed: p.fixed };
