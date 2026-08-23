@@ -1,4 +1,3 @@
-// chatRoute.js
 const express = require('express');
 const router = express.Router();
 
@@ -6,15 +5,16 @@ const KeyManager = require('./keyManager');
 const { callGroq } = require('./groq');
 const { callGemini } = require('./gemini');
 const { callOpenRouter } = require('./openrouter');
-const { detectSearchIntent, searchWeb } = require('./searchIntent');
+const { searchWeb } = require('./searchIntent');
 const modePrompts = require('./prompts');
 const authMiddleware = require('./authMiddleware');
 const pool = require('./db');
+const { think, verifyAnswer } = require('./brain');
 
 function collectKeys(prefix) {
   const arr = [];
   for (let i = 1; i <= 10; i++) {
-    const key = process.env[`${prefix}_${i}`];
+    const key = process.env[prefix + '_' + i];
     if (key) arr.push(key);
   }
   return arr.join(',');
@@ -31,10 +31,10 @@ const providerCallers = { groq: callGroq, gemini: callGemini, openrouter: callOp
 const modeProviderOrder = {
   general: ['groq', 'gemini', 'openrouter'],
   study: ['gemini', 'groq', 'openrouter'],
-  coding: ['groq', 'openrouter', 'gemini'],
+  coding: ['gemini', 'groq', 'openrouter'],
 };
 
-const PROVIDER_TOKEN_BUDGET = { groq: 6800, openrouter: 6800, gemini: 200000 };
+const PROVIDER_TOKEN_BUDGET = { groq: 12000, openrouter: 12000, gemini: 200000 };
 const KEEP_FIRST_N = 2;
 
 function estimateTokens(text) {
@@ -57,7 +57,7 @@ function trimHistoryForBudget(messages, maxTokens) {
   if (droppedCount > 0) {
     return [
       ...firstChunk,
-      { role: 'system', content: `[Note: ${droppedCount} older messages not shown]` },
+      { role: 'system', content: '[Note: ' + droppedCount + ' older messages not shown]' },
       ...recentChunk,
     ];
   }
@@ -74,12 +74,18 @@ router.post('/sessions', authMiddleware, async (req, res) => {
 });
 
 router.get('/sessions', authMiddleware, async (req, res) => {
-  const result = await pool.query('SELECT * FROM sessions WHERE user_id = $1 ORDER BY created_at DESC', [req.userId]);
+  const result = await pool.query(
+    'SELECT * FROM sessions WHERE user_id = $1 ORDER BY created_at DESC',
+    [req.userId]
+  );
   res.json(result.rows);
 });
 
 router.get('/sessions/:id/messages', authMiddleware, async (req, res) => {
-  const result = await pool.query('SELECT role, content FROM messages WHERE session_id = $1 ORDER BY created_at ASC', [req.params.id]);
+  const result = await pool.query(
+    'SELECT role, content FROM messages WHERE session_id = $1 ORDER BY created_at ASC',
+    [req.params.id]
+  );
   res.json(result.rows);
 });
 
@@ -89,16 +95,17 @@ router.delete('/sessions/:id', authMiddleware, async (req, res) => {
 });
 
 async function updateSessionTitle(sessionId, firstMessage) {
-  const title = firstMessage.slice(0, 40);
-  await pool.query('UPDATE sessions SET title = $1 WHERE id = $2', [title, sessionId]);
+  await pool.query('UPDATE sessions SET title = $1 WHERE id = $2', [
+    (firstMessage || 'Chat').slice(0, 40),
+    sessionId,
+  ]);
 }
 
 function optionalAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    const jwt = require('jsonwebtoken');
     try {
-      const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
+      const decoded = require('jsonwebtoken').verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
       req.userId = decoded.userId;
     } catch (e) {}
   }
@@ -106,25 +113,39 @@ function optionalAuth(req, res, next) {
 }
 
 router.post('/chat', optionalAuth, async (req, res) => {
-  const { mode, messages, sessionId, image, file } = req.body;
+  const { mode, messages, sessionId, image, images, file } = req.body;
 
   if (!mode || !modePrompts[mode]) return res.status(400).json({ error: 'Invalid or missing mode' });
-  if (!Array.isArray(messages) || messages.length === 0) return res.status(400).json({ error: 'Messages array required' });
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'Messages array required' });
+  }
+
+  const allImages =
+    images && Array.isArray(images) && images.length
+      ? images.slice(0, 4)
+      : image
+      ? [image]
+      : null;
 
   const lastUserMessage = messages[messages.length - 1];
+  const userText = lastUserMessage?.content || '';
   const isValidSessionId = sessionId && !isNaN(Number(sessionId));
   const canSaveToDb = isValidSessionId && req.userId;
 
   if (canSaveToDb) {
-    const savedText = image
-      ? `📷 [Image] ${lastUserMessage.content}`
+    const savedText = allImages
+      ? '📷 [Image] ' + userText
       : file
-      ? `📄 [${file.name}] ${lastUserMessage.content}`
-      : lastUserMessage.content;
-    await pool.query('INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3)', [sessionId, 'user', savedText]);
+      ? '📄 [' + file.name + '] ' + userText
+      : userText;
+    await pool.query('INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3)', [
+      sessionId,
+      'user',
+      savedText,
+    ]);
     const countResult = await pool.query('SELECT COUNT(*) FROM messages WHERE session_id = $1', [sessionId]);
     if (parseInt(countResult.rows[0].count) === 1) {
-      await updateSessionTitle(sessionId, lastUserMessage.content || 'Chat');
+      await updateSessionTitle(sessionId, userText || 'Chat');
     }
   }
 
@@ -134,29 +155,46 @@ router.post('/chat', optionalAuth, async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
+  const decision = await think({
+    userText,
+    hasImage: !!(allImages && allImages.length),
+    hasFile: !!file,
+    mode,
+  });
+
+  res.write('data: ' + JSON.stringify({ thinking: decision.thought || 'Soch raha hoon...' }) + '\n\n');
+
   let searchContext = null;
-  const needsSearch = await detectSearchIntent(lastUserMessage.content);
-  if (needsSearch) {
+  if (decision.search) {
+    res.write('data: ' + JSON.stringify({ thinking: 'Web search kar raha hoon...' }) + '\n\n');
     try {
-      searchContext = await searchWeb(lastUserMessage.content);
+      searchContext = await searchWeb(userText);
     } catch (err) {
-      console.warn('Search skip/fail:', err.message);
+      console.warn('Search fail:', err.message);
     }
   }
 
   const systemPrompt = modePrompts[mode];
-  const currentDate = new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' });
-  const dateNote = `\n\nToday's date: ${currentDate}.`;
-  const searchNote = searchContext
-    ? `\n\nLive web search results:\n${searchContext}`
-    : '';
-  const fileNote = file
-    ? `\n\nUser attached file "${file.name}":\n${file.text}`
-    : '';
-
+  const currentDate = new Date().toLocaleDateString('en-IN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const dateNote = "\n\nToday's date: " + currentDate + '.';
+  const searchNote = searchContext ? '\n\nLive web search results:\n' + searchContext : '';
+  const fileNote = file ? '\n\nUser attached file "' + file.name + '":\n' + file.text : '';
   const finalSystemPrompt = systemPrompt + dateNote + searchNote + fileNote;
   const systemTokens = estimateTokens(finalSystemPrompt);
-  const order = image ? ['gemini'] : modeProviderOrder[mode];
+
+  let order;
+  if (decision.action === 'vision' || (allImages && allImages.length)) {
+    order = ['gemini', 'groq', 'openrouter'];
+  } else if (decision.provider === 'groq') {
+    order = ['groq', 'gemini', 'openrouter'];
+  } else {
+    order = modeProviderOrder[mode] || ['gemini', 'groq', 'openrouter'];
+  }
+
   let succeeded = false;
 
   for (const providerName of order) {
@@ -177,32 +215,50 @@ router.post('/chat', optionalAuth, async (req, res) => {
         const { content } = await providerCallers[providerName](
           keyEntry.key,
           providerMessages,
-          (chunk) => res.write(`data: ${JSON.stringify({ chunk })}\n\n`),
-          image
+          (chunk) => res.write('data: ' + JSON.stringify({ chunk }) + '\n\n'),
+          allImages
         );
 
-        if (canSaveToDb) {
-          await pool.query('INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3)', [sessionId, 'assistant', content]);
+        let finalContent = content;
+
+        if ((mode === 'coding' || mode === 'study') && content && content.length > 80) {
+          res.write('data: ' + JSON.stringify({ thinking: 'Reply check kar raha hoon...' }) + '\n\n');
+          try {
+            const v = await verifyAnswer(userText, content, mode);
+            if (!v.ok && v.fixed) {
+              finalContent = v.fixed;
+              res.write('data: ' + JSON.stringify({ replace: finalContent }) + '\n\n');
+            }
+          } catch (e) {
+            console.warn('Verify skip:', e.message);
+          }
         }
 
-        res.write(`data: ${JSON.stringify({ done: true, provider: providerName })}\n\n`);
+        if (canSaveToDb) {
+          await pool.query('INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3)', [
+            sessionId,
+            'assistant',
+            finalContent,
+          ]);
+        }
+
+        res.write('data: ' + JSON.stringify({ done: true, provider: providerName }) + '\n\n');
         res.end();
         succeeded = true;
         providerSucceeded = true;
         break;
       } catch (err) {
-        console.error(`[${providerName}] key #${keyEntry.id} failed:`, err.message);
+        console.error('[' + providerName + '] key #' + keyEntry.id + ' failed:', err.message);
         const status = err?.status || err?.response?.status;
         if (status === 429 || status === 413 || status === 503) manager.markCooldown(keyEntry, 60000);
         else if (status === 401 || status === 403) manager.markCooldown(keyEntry, 300000);
       }
     }
-
     if (providerSucceeded) break;
   }
 
   if (!succeeded) {
-    res.write(`data: ${JSON.stringify({ error: 'Sabhi AI providers abhi unavailable hain' })}\n\n`);
+    res.write('data: ' + JSON.stringify({ error: 'Sabhi AI providers abhi unavailable hain' }) + '\n\n');
     res.end();
   }
 });
