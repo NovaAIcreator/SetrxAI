@@ -248,7 +248,7 @@ router.post('/chat', optionalAuth, async (req, res) => {
         providerSucceeded = true;
         break;
       } catch (err) {
-        console.error('[' + providerName + '] key #' + keyEntry.id + ' failed:', err.message);
+        console.error('[' + providerName + '] failed:', err.message);
         const status = err?.status || err?.response?.status;
         if (status === 429 || status === 413 || status === 503) manager.markCooldown(keyEntry, 60000);
         else if (status === 401 || status === 403) manager.markCooldown(keyEntry, 300000);
