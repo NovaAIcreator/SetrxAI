@@ -1,3 +1,5 @@
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
 const ACCOUNTS = [
   { id: process.env.CF_ACCOUNT_ID_1, token: process.env.CF_API_TOKEN_1 },
   { id: process.env.CF_ACCOUNT_ID_2, token: process.env.CF_API_TOKEN_2 },
@@ -15,65 +17,83 @@ function isCapacityError(msg) {
   return /capacity temporarily exceeded|rate limit|429|503/i.test(msg || '');
 }
 
-// Hinglish → clear English (van = vehicle, not forest)
-function translateHinglish(raw) {
-  let t = ' ' + (raw || '').trim() + ' ';
-
-  const map = [
-    [/\bvan\b/gi, ' cargo van vehicle '],
-    [/\bvans\b/gi, ' cargo van vehicles '],
-    [/gaadi|gadi|car\b/gi, ' car '],
-    [/bike|motorcycle|pulser|pulsar/gi, ' motorcycle '],
-    [/scooty|scooter/gi, ' scooter '],
-    [/banda|aadmi|insaan|person|man\b/gi, ' a man '],
-    [/ladki|aurat|woman|girl/gi, ' a woman '],
-    [/banao|bana do|bana dena|generate|draw|create/gi, ' '],
-    [/ek\s+/gi, ' one '],
-    [/ki\s+/gi, ' '],
-    [/ka\s+/gi, ' '],
-    [/colour|color/gi, ' color '],
-    [/red color|red colour/gi, ' red colored '],
-    [/road pe|road pr|sarak/gi, ' on a road '],
-    [/empty|khali|bina banda|no person|without person/gi, ' empty, no people inside or outside '],
-    [/chal raha|chal rha|walking|paidal/gi, ' walking on foot '],
-    [/phone|mobile/gi, ' smartphone '],
-  ];
-
-  map.forEach(function (pair) {
-    t = t.replace(pair[0], pair[1]);
-  });
-
-  return t.replace(/\s+/g, ' ').trim();
-}
-
-function enhancePrompt(userPrompt) {
-  const original = (userPrompt || '').trim();
-  const translated = translateHinglish(original);
-
-  return (
-    'Photorealistic photograph of: ' + translated + '. ' +
-    'Show ONLY this subject. Do not add unrelated objects. ' +
-    'If it is a vehicle, show the vehicle clearly, not a forest or landscape. ' +
-    'Sharp focus, natural lighting, high detail. ' +
-    'Original request: ' + original
-  );
-}
-
-function enhanceEditPrompt(userPrompt) {
-  const p = (userPrompt || '').trim();
-  const lower = p.toLowerCase();
-  const wantsEnhance =
-    !p ||
-    /accha|acha|better|improve|enhance|hd|quality|clear|fix|sudhar|upscale|retouch|sharp|or aacha|aur accha/.test(lower);
-
-  if (wantsEnhance) {
-    return (
-      'Improve this photo: sharper, better lighting, cleaner quality. ' +
-      'Keep the SAME subject and background. Do not add new people or objects. ' +
-      (p ? 'Request: ' + translateHinglish(p) : '')
-    );
+function getGeminiKey() {
+  for (let i = 1; i <= 10; i++) {
+    const k = process.env['GEMINI_KEYS_' + i];
+    if (k && k.trim()) return k.trim();
   }
-  return 'Edit this photo. Request: ' + translateHinglish(p) + '. Keep main subject unless asked to change.';
+  return process.env.GEMINI_API_KEY || null;
+}
+
+// Gemini = brain — samajhta hai user kya chahta hai
+async function smartPrompt(userText, image) {
+  const apiKey = getGeminiKey();
+  if (!apiKey) {
+    return {
+      mode: image ? 'edit' : 'generate',
+      prompt: (userText || 'high quality image').trim(),
+      useReference: !!image,
+    };
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    const system = `You are an expert image director. User may write in Hindi, Hinglish, or English.
+Your job: understand EXACTLY what they want and write ONE perfect English prompt for an image model.
+
+Rules:
+1. Output ONLY valid JSON, no markdown, no extra text.
+2. JSON shape:
+{"mode":"generate"|"edit"|"recreate","prompt":"...","useReference":true|false}
+3. mode meanings:
+- generate = brand new image from text only
+- edit = improve/change the attached photo but keep same subject (do not flip/mirror)
+- recreate = user showed a reference (logo/design/photo) and wants a NEW better version inspired by it, NOT a copy/flip of the same image
+4. prompt must be detailed English, photorealistic when needed, specific about subject.
+5. If user says "van" in Hinglish they mean a cargo van vehicle, NOT a forest.
+6. If user wants logo/design like the attached image: mode=recreate, useReference=false, write a full logo design prompt describing style/colors/text from the image but as a NEW original design.
+7. Never say flip, mirror, or "same photo".
+8. Keep prompt under 120 words.`;
+
+    const parts = [];
+    parts.push({
+      text:
+        system +
+        '\n\nUser request: ' +
+        (userText || '(no text, only image — improve quality)') +
+        (image ? '\n\nAn image is attached. Analyze it.' : '\n\nNo image attached.'),
+    });
+
+    if (image && image.data) {
+      const raw = String(image.data).replace(/^data:[^;]+;base64,/, '');
+      parts.push({
+        inlineData: {
+          mimeType: image.mimeType || 'image/jpeg',
+          data: raw,
+        },
+      });
+    }
+
+    const result = await model.generateContent(parts);
+    const text = (result.response && result.response.text && result.response.text()) || '';
+    const clean = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    return {
+      mode: parsed.mode || (image ? 'edit' : 'generate'),
+      prompt: (parsed.prompt || userText || 'high quality image').trim(),
+      useReference: parsed.useReference === true && !!image,
+    };
+  } catch (err) {
+    console.error('smartPrompt failed:', err.message);
+    return {
+      mode: image ? 'edit' : 'generate',
+      prompt: (userText || 'high quality detailed image').trim(),
+      useReference: !!image,
+    };
+  }
 }
 
 async function parseResponse(res) {
@@ -100,30 +120,25 @@ async function parseResponse(res) {
   };
 }
 
-// flux-2-klein-9b = fast + good quality (\~8–15 sec)
-async function runFluxKlein(prompt, imageBuffer, retries) {
+async function runFlux(prompt, imageBuffer, retries) {
   if (ACCOUNTS.length === 0) throw new Error('No Cloudflare accounts configured');
 
   let lastError;
   const maxRetries = retries == null ? 1 : retries;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    if (attempt > 0) {
-      console.log('Retry ' + attempt + '...');
-      await sleep(1500 * attempt);
-    }
+    if (attempt > 0) await sleep(1500 * attempt);
 
     for (let i = 0; i < ACCOUNTS.length; i++) {
       const acc = ACCOUNTS[cfIdx % ACCOUNTS.length];
       cfIdx++;
       try {
-        console.log('Trying account ' + (i + 1) + ' flux-2-klein-9b...');
+        console.log('Flux account ' + (i + 1) + '...');
 
         const form = new FormData();
         form.append('prompt', prompt);
         form.append('width', '1024');
         form.append('height', '1024');
-        // klein-9b: steps fixed at 4, mat bhejo
 
         if (imageBuffer && imageBuffer.length) {
           form.append(
@@ -153,7 +168,7 @@ async function runFluxKlein(prompt, imageBuffer, retries) {
         }
 
         const out = await parseResponse(res);
-        console.log('Image OK (flux-2-klein-9b)');
+        console.log('Image OK | prompt:', prompt.slice(0, 80));
         return out;
       } catch (err) {
         console.error('Account ' + (i + 1) + ' failed:', err.message);
@@ -168,20 +183,46 @@ async function runFluxKlein(prompt, imageBuffer, retries) {
 }
 
 async function generateImageBuffer(prompt, image) {
-  if (image && image.data) {
-    const raw = String(image.data).replace(/^data:[^;]+;base64,/, '');
-    const imgBuf = Buffer.from(raw, 'base64');
-    try {
-      return await runFluxKlein(enhanceEditPrompt(prompt), imgBuf, 2);
-    } catch (err) {
-      if (isCapacityError(err.message)) {
-        throw new Error('Image edit busy — 20–30 sec baad try karo.');
-      }
-      throw err;
-    }
+  // 1) Gemini samajhe — user kya chahta hai
+  const plan = await smartPrompt(prompt, image);
+  console.log('Image plan:', plan.mode, '| useRef:', plan.useReference);
+
+  let finalPrompt = plan.prompt;
+
+  if (plan.mode === 'edit') {
+    finalPrompt =
+      'Edit this photo carefully. ' + finalPrompt +
+      ' Keep the same subject. Do not flip or mirror. High quality.';
+  } else if (plan.mode === 'recreate') {
+    finalPrompt =
+      'Create a NEW original design. ' + finalPrompt +
+      ' Do not copy or flip the reference photo. Professional, clean, high quality.';
+  } else {
+    finalPrompt =
+      'Photorealistic high quality image. ' + finalPrompt +
+      ' Show only what is asked. Sharp focus, natural lighting.';
   }
 
-  return runFluxKlein(enhancePrompt(prompt), null, 1);
+  // 2) Reference image kab use kare
+  let imgBuf = null;
+  if (image && image.data && (plan.useReference || plan.mode === 'edit')) {
+    const raw = String(image.data).replace(/^data:[^;]+;base64,/, '');
+    imgBuf = Buffer.from(raw, 'base64');
+  }
+
+  // recreate → usually text-only (naya design)
+  if (plan.mode === 'recreate') {
+    imgBuf = null;
+  }
+
+  try {
+    return await runFlux(finalPrompt, imgBuf, 1);
+  } catch (err) {
+    if (isCapacityError(err.message)) {
+      throw new Error('Image service busy — 20–30 sec baad try karo.');
+    }
+    throw err;
+  }
 }
 
 module.exports = { generateImageBuffer };
