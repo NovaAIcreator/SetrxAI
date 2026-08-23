@@ -7,54 +7,21 @@ const ACCOUNTS = [
 
 let cfIdx = 0;
 
-const SHARP =
-  'ultra sharp, razor-sharp focus, 8k UHD, highly detailed, natural skin texture, ' +
-  'shot on Sony A7IV 85mm f/1.8, professional color grading, realistic lighting, no blur';
-
-const NEGATIVE =
-  'blur, motion blur, out of focus, lowres, jpeg artifacts, extra fingers, extra limbs, ' +
-  'deformed face, watermark, text, logo, cartoon, 3d render, oversaturated';
-
-function translateHinglish(raw) {
-  let t = ' ' + (raw || '').trim() + ' ';
-  const map = [
-    [/chal raha ho|chal rha ho|chal raha hai|paidal|legs se chal|pair se/gi, ' walking on foot on a road '],
-    [/bike nahi|bike nhi|or nhi bike|bina bike|not on bike/gi, ' not riding a motorcycle or bike or scooter '],
-    [/phone use|mobile use|phone dekh|phone krte/gi, ' looking at a smartphone in their hand '],
-    [/banda|aadmi|insaan/gi, ' a man '],
-    [/ladki|aurat/gi, ' a woman '],
-    [/road pr|road pe|sarak/gi, ' on an Indian street road '],
-    [/accha banao|acha banao|hd banao|clear banao/gi, ' enhance quality, sharper, better lighting '],
-  ];
-  map.forEach(function (pair) {
-    t = t.replace(pair[0], pair[1]);
-  });
-  return t.replace(/\s+/g, ' ').trim();
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
-function wantsWalking(text) {
-  return /walk|paidal|legs se|pair se|chal r/i.test(text || '');
-}
-
-function wantsNoVehicle(text) {
-  return /bike nahi|bike nhi|not on bike|bina bike|no motorcycle|no bike|paidal|walk/i.test(text || '');
+function isCapacityError(msg) {
+  return /capacity temporarily exceeded|rate limit|429|503/i.test(msg || '');
 }
 
 function enhancePrompt(userPrompt) {
-  const original = (userPrompt || '').trim();
-  const translated = translateHinglish(original);
-  let extra = '';
-  if (wantsWalking(original) || wantsNoVehicle(original)) {
-    extra =
-      ' The person is WALKING ON FOOT. Both feet on the ground. ' +
-      'NO motorcycle, NO bike, NO scooter, NO helmet unless asked, NO riding. ';
-  }
+  const p = (userPrompt || '').trim();
   return (
-    'Photorealistic photograph. Follow EVERY detail exactly. Do not add extra objects. ' +
-    extra +
-    'Scene: ' + translated +
-    '. Original request: ' + original +
-    '. ' + SHARP
+    'Photorealistic image. Show ONLY what is asked. ' +
+    'Do not add people, faces, or extra objects unless the user asked for them. ' +
+    'Subject: ' + p +
+    '. Sharp focus, natural lighting, high detail, clean composition.'
   );
 }
 
@@ -63,41 +30,32 @@ function enhanceEditPrompt(userPrompt) {
   const lower = p.toLowerCase();
   const wantsEnhance =
     !p ||
-    /accha|acha|better|improve|enhance|hd|quality|clear|fix|sudhar|upscale|retouch|sharp/.test(lower);
+    /accha|acha|better|improve|enhance|hd|quality|clear|fix|sudhar|upscale|retouch|sharp|or aacha|aur accha/.test(lower);
 
   if (wantsEnhance) {
     return (
-      'Same person, same pose, same background. Photorealistic enhancement only. ' +
-      'Sharper details, cleaner skin, better lighting, higher dynamic range, ' +
-      'professional DSLR look, keep identity 100%. ' +
-      (p ? 'User request: ' + p + '. ' : '') +
-      SHARP
+      'Improve this photo: sharper details, better lighting, cleaner quality. ' +
+      'Keep the SAME subject, pose, and background. Do not add new people or objects. ' +
+      (p ? 'Extra request: ' + p : '')
     );
   }
-
-  return (
-    'Edit this real photo as requested. Keep the same person unless asked to change. ' +
-    'Request: ' + p + '. ' + SHARP
-  );
+  return 'Edit this photo as requested. Keep the main subject unless asked to change it. Request: ' + p;
 }
 
-function editStrength(userPrompt) {
-  const p = (userPrompt || '').toLowerCase();
-  if (!p || /accha|acha|better|improve|enhance|hd|quality|clear|sharp|fix/.test(p)) return 0.32;
-  if (/cartoon|anime|ghibli|oil paint|sketch/.test(p)) return 0.72;
-  return 0.48;
-}
-
-async function parseCfImageResponse(res) {
+async function parseResponse(res) {
   const contentType = (res.headers.get('content-type') || '').toLowerCase();
 
   if (contentType.includes('application/json')) {
     const json = await res.json();
-    const base64 = (json.result && json.result.image) || json.image;
+    const base64 =
+      (json.result && json.result.image) ||
+      json.image ||
+      (json.result && typeof json.result === 'string' ? json.result : null);
     if (!base64 || typeof base64 !== 'string') {
-      throw new Error('No base64 image in Cloudflare response');
+      throw new Error('No image in response: ' + JSON.stringify(json).slice(0, 200));
     }
-    return { buffer: Buffer.from(base64, 'base64'), contentType: 'image/jpeg' };
+    const clean = base64.replace(/^data:image\/\w+;base64,/, '');
+    return { buffer: Buffer.from(clean, 'base64'), contentType: 'image/jpeg' };
   }
 
   const buffer = Buffer.from(await res.arrayBuffer());
@@ -106,69 +64,87 @@ async function parseCfImageResponse(res) {
   return { buffer, contentType: type };
 }
 
-async function runOnAccounts(path, body) {
+async function runFlux2(prompt, imageBuffer, retries) {
   if (ACCOUNTS.length === 0) throw new Error('No Cloudflare accounts configured');
 
   let lastError;
-  for (let i = 0; i < ACCOUNTS.length; i++) {
-    const acc = ACCOUNTS[cfIdx % ACCOUNTS.length];
-    cfIdx++;
-    try {
-      console.log('Trying Cloudflare account ' + (i + 1) + ' for ' + path);
-      const res = await fetch(
-        'https://api.cloudflare.com/client/v4/accounts/' + acc.id + '/ai/run/' + path,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: 'Bearer ' + acc.token,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-        }
-      );
+  const maxRetries = retries == null ? 2 : retries;
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err.errors && err.errors[0] && err.errors[0].message) || ('HTTP ' + res.status));
-      }
-
-      const out = await parseCfImageResponse(res);
-      console.log('Image generated successfully!');
-      return out;
-    } catch (err) {
-      console.error('Account ' + (i + 1) + ' failed:', err.message);
-      lastError = err;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      console.log('Retry ' + attempt + '...');
+      await sleep(2000 * attempt);
     }
+
+    for (let i = 0; i < ACCOUNTS.length; i++) {
+      const acc = ACCOUNTS[cfIdx % ACCOUNTS.length];
+      cfIdx++;
+      try {
+        console.log('Trying account ' + (i + 1) + ' flux-2-dev...');
+
+        const form = new FormData();
+        form.append('prompt', prompt);
+        form.append('steps', '20');
+        form.append('width', '1024');
+        form.append('height', '1024');
+
+        if (imageBuffer && imageBuffer.length) {
+          form.append(
+            'input_image_0',
+            new Blob([imageBuffer], { type: 'image/jpeg' }),
+            'photo.jpg'
+          );
+        }
+
+        const res = await fetch(
+          'https://api.cloudflare.com/client/v4/accounts/' + acc.id + '/ai/run/@cf/black-forest-labs/flux-2-dev',
+          {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + acc.token },
+            body: form,
+          }
+        );
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(
+            (err.errors && err.errors[0] && err.errors[0].message) ||
+              ('HTTP ' + res.status)
+          );
+        }
+
+        const out = await parseResponse(res);
+        console.log('Image generated successfully (flux-2-dev)!');
+        return out;
+      } catch (err) {
+        console.error('Account ' + (i + 1) + ' failed:', err.message);
+        lastError = err;
+      }
+    }
+
+    if (!isCapacityError(lastError && lastError.message)) break;
   }
+
   throw lastError || new Error('All accounts failed');
 }
 
 async function generateImageBuffer(prompt, image) {
+  // Photo edit
   if (image && image.data) {
     const raw = String(image.data).replace(/^data:[^;]+;base64,/, '');
-    let negative = NEGATIVE;
-    if (wantsNoVehicle(prompt) || wantsWalking(prompt)) {
-      negative += ', motorcycle, bike, scooter, helmet visor, riding a vehicle';
+    const imgBuf = Buffer.from(raw, 'base64');
+    try {
+      return await runFlux2(enhanceEditPrompt(prompt), imgBuf, 3);
+    } catch (err) {
+      if (isCapacityError(err.message)) {
+        throw new Error('Image edit busy hai — 30–60 sec baad try karo.');
+      }
+      throw err;
     }
-    return runOnAccounts('@cf/runwayml/stable-diffusion-v1-5-img2img', {
-      prompt: enhanceEditPrompt(prompt),
-      negative_prompt: negative,
-      image_b64: raw,
-      strength: editStrength(prompt),
-      num_steps: 20,
-      guidance: 8,
-    });
   }
 
-  let fluxPrompt = enhancePrompt(prompt);
-  if (wantsNoVehicle(prompt) || wantsWalking(prompt)) {
-    fluxPrompt += ' Absolutely no motorcycle, no bike, no scooter.';
-  }
-
-  return runOnAccounts('@cf/black-forest-labs/flux-1-schnell', {
-    prompt: fluxPrompt,
-    steps: 8,
-  });
+  // Normal generate
+  return runFlux2(enhancePrompt(prompt), null, 2);
 }
 
 module.exports = { generateImageBuffer };
