@@ -541,4 +541,95 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
           )}
           {fileError && <p className="text-xs text-red-500 mb-1">{fileError}</p>}
 
-          <div className="flex items-end gap-1 rounded-2xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/[0.
+          <div className="flex items-end gap-1 rounded-2xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-1.5 py-1.5 shadow-sm focus-within:border-zinc-400 dark:focus-within:border-white/25 transition-colors">
+            <input type="file" accept="image/*" multiple ref={fileInputRef} onChange={handleImageSelect} className="hidden" />
+            <input
+              type="file"
+              accept=".pdf,.docx,.txt,.csv,.js,.jsx,.ts,.tsx,.py,.json,.md,.html,.css"
+              ref={docInputRef}
+              onChange={handleDocSelect}
+              className="hidden"
+            />
+
+            <div className="relative" ref={plusMenuRef}>
+              <button
+                type="button"
+                onClick={() => setShowPlusMenu((o) => !o)}
+                className="p-2.5 rounded-xl text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/10 transition"
+              >
+                <Plus size={20} className={showPlusMenu ? 'rotate-45 transition-transform' : 'transition-transform'} />
+              </button>
+              {showPlusMenu && (
+                <div className="absolute bottom-12 left-0 z-50 min-w-[180px] rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-xl p-1">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                    className="flex w-full items-center gap-2 px-3 py-2.5 rounded-lg text-sm hover:bg-zinc-100 dark:hover:bg-white/5"
+                  >
+                    <Paperclip size={15} /> Photos (max 4)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => docInputRef.current && docInputRef.current.click()}
+                    className="flex w-full items-center gap-2 px-3 py-2.5 rounded-lg text-sm hover:bg-zinc-100 dark:hover:bg-white/5"
+                  >
+                    <FileText size={15} /> File
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForceImageGen(true);
+                      setShowPlusMenu(false);
+                      setTimeout(() => textareaRef.current && textareaRef.current.focus(), 50);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2.5 rounded-lg text-sm hover:bg-zinc-100 dark:hover:bg-white/5"
+                  >
+                    <Wand2 size={15} /> Generate image
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              rows={1}
+              className="flex-1 resize-none bg-transparent text-[15px] text-zinc-900 dark:text-zinc-100 px-1 py-2.5 outline-none max-h-32 placeholder:text-zinc-400"
+            />
+
+            <button
+              type="button"
+              onClick={toggleListening}
+              className={
+                'p-2.5 rounded-xl transition ' +
+                (isListening
+                  ? 'text-red-500 bg-red-50 dark:bg-red-500/10'
+                  : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/10')
+              }
+            >
+              <Mic size={20} />
+            </button>
+
+            <button
+              type="button"
+              onClick={sendMessage}
+              disabled={loading || imgLoading}
+              className="p-2.5 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 disabled:opacity-40 hover:opacity-90 transition shrink-0"
+            >
+              <Send size={18} />
+            </button>
+          </div>
+
+          {!isEmpty && (
+            <p className="text-[10px] text-center text-zinc-400 mt-2">
+              SetrxAI can make mistakes. Check important info.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
