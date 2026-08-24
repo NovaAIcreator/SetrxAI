@@ -566,4 +566,156 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
                   setShowPlusMenu(false);
                   setTimeout(() => textareaRef.current && textareaRef.current.focus(), 50);
                 }}
-                className="flex w-full items-center ga
+                className="flex w-full items-center gap-2 px-3 py-2.5 rounded-lg text-sm hover:bg-zinc-100 dark:hover:bg-white/5"
+              >
+                <Wand2 size={15} /> Generate image
+              </button>
+            </div>
+          )}
+        </div>
+
+        <ModePill mode={mode || 'general'} setMode={setMode} />
+
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          rows={1}
+          className="flex-1 resize-none bg-transparent text-[15px] text-zinc-900 dark:text-zinc-100 px-1 py-2.5 outline-none max-h-32 placeholder:text-zinc-400"
+        />
+
+        <button
+          type="button"
+          onClick={toggleListening}
+          className={
+            'p-2.5 rounded-xl transition ' +
+            (isListening
+              ? 'text-red-500 bg-red-50 dark:bg-red-500/10'
+              : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/10')
+          }
+        >
+          <Mic size={20} />
+        </button>
+
+        <button
+          type="button"
+          onClick={sendMessage}
+          disabled={loading || imgLoading}
+          className="p-2.5 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 disabled:opacity-40 hover:opacity-90 transition shrink-0"
+        >
+          <Send size={18} />
+        </button>
+      </div>
+
+      {!isEmpty && (
+        <p className="text-[10px] text-center text-zinc-400 mt-2">
+          SetrxAI can make mistakes. Check important info.
+        </p>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col h-full min-h-0 bg-zinc-50 dark:bg-[#0c0c0f]">
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <img src={lightbox} alt="" className="max-w-full max-h-full rounded-lg object-contain" />
+        </div>
+      )}
+
+      {/* EMPTY: greeting + chatbox CENTERED */}
+      {isEmpty ? (
+        <div className="flex-1 flex flex-col items-center justify-center px-3 sm:px-4 pb-10">
+          <ModeHero />
+          <div className="w-full mt-2">{composer}</div>
+        </div>
+      ) : (
+        <>
+          <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto">
+            <div className="max-w-2xl mx-auto w-full px-3 sm:px-4 py-6">
+              {displayMessages.map((msg, i) => {
+                if (msg.role === 'user' && msg.previewUrls && msg.previewUrls.length) {
+                  return (
+                    <div key={i} className="flex justify-end mb-5">
+                      <div className="max-w-[85%] flex flex-col items-end gap-2">
+                        <div className="flex flex-wrap gap-1.5 justify-end">
+                          {msg.previewUrls.map((url, j) => (
+                            <img
+                              key={j}
+                              src={url}
+                              alt=""
+                              className="h-24 w-24 object-cover rounded-xl border border-zinc-200 dark:border-white/10"
+                            />
+                          ))}
+                        </div>
+                        {msg.content && msg.content !== 'Photo' && (
+                          <div className="rounded-2xl rounded-br-md px-4 py-2.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[15px] leading-relaxed">
+                            {msg.content}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (msg.role === 'assistant' && msg.content && msg.content.indexOf('__IMAGE__') === 0) {
+                  const rest = msg.content.replace('__IMAGE__', '');
+                  const splitAt = rest.indexOf('__PROMPT__');
+                  const imgUrl = splitAt >= 0 ? rest.slice(0, splitAt) : rest;
+                  const imgPrompt = splitAt >= 0 ? rest.slice(splitAt + 10) : '';
+                  return (
+                    <div key={i} className="mb-6">
+                      <span className="text-xs text-zinc-500 mb-2 block">SetrxAI</span>
+                      <button
+                        type="button"
+                        className="rounded-2xl overflow-hidden border border-zinc-200 dark:border-white/10 max-w-sm shadow-sm"
+                        onClick={() => setLightbox(imgUrl)}
+                      >
+                        <img src={imgUrl} alt={imgPrompt} className="w-full object-cover" referrerPolicy="no-referrer" />
+                      </button>
+                      {imgPrompt ? <p className="text-xs text-zinc-500 mt-1.5">&quot;{imgPrompt}&quot;</p> : null}
+                      <div className="flex gap-3 mt-2 text-xs text-zinc-500">
+                        <a href={imgUrl} target="_blank" rel="noreferrer" className="hover:underline">
+                          Download
+                        </a>
+                        <button type="button" className="hover:underline" onClick={() => useImageForEdit(imgUrl)}>
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="hover:underline"
+                          onClick={() => {
+                            const job = lastImageJob.current;
+                            if (job) generateImage(job.prompt, job.photo);
+                            else generateImage(imgPrompt, null);
+                          }}
+                        >
+                          Again
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return <Message key={i} role={msg.role} content={msg.content} />;
+              })}
+
+              {thinkingSteps.length > 0 && <ThinkingPanel steps={thinkingSteps} />}
+              {imgLoading && <ImageGeneratingAnimation />}
+            </div>
+          </div>
+
+          {/* ACTIVE CHAT: composer BOTTOM */}
+          <div className="shrink-0 border-t border-zinc-200/80 dark:border-white/[0.06] bg-white/90 dark:bg-[#0c0c0f]/95 backdrop-blur-md px-3 sm:px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            {composer}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
