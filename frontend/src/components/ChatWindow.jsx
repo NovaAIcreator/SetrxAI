@@ -1,7 +1,16 @@
+
 import { useState, useEffect, useRef } from 'react';
 import {
-  Paperclip, Mic, Send, X, FileText, Wand2, Plus,
-  ChevronDown, ChevronRight, Check,
+  Paperclip,
+  Mic,
+  Send,
+  X,
+  FileText,
+  Wand2,
+  Plus,
+  ChevronDown,
+  ChevronRight,
+  Check,
 } from 'lucide-react';
 import Message from './Message';
 import ModeHero from './ModeHero';
@@ -65,16 +74,15 @@ function ModePill({ mode, setMode }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 rounded-full border border-zinc-200 dark:border-white/10
-          bg-zinc-50 dark:bg-white/5 px-2.5 py-1.5 text-xs font-medium text-zinc-800 dark:text-zinc-100
-          hover:bg-zinc-100 dark:hover:bg-white/10 transition mb-0.5"
+        className="flex items-center gap-1 h-9 rounded-full border border-zinc-200 dark:border-zinc-700
+          bg-zinc-50 dark:bg-zinc-800/80 px-3 text-xs font-medium text-zinc-800 dark:text-zinc-100
+          hover:bg-zinc-100 dark:hover:bg-zinc-800 transition whitespace-nowrap"
       >
         {current.label}
         <ChevronDown size={13} className={'opacity-60 transition ' + (open ? 'rotate-180' : '')} />
       </button>
       {open && (
-        <div className="absolute bottom-10 left-0 z-50 w-44 rounded-xl border border-zinc-200 dark:border-white/10
-          bg-white dark:bg-zinc-900 shadow-xl p-1 overflow-hidden">
+        <div className="absolute bottom-11 left-0 z-50 w-48 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl p-1.5 overflow-hidden">
           {MODES.map((m) => (
             <button
               key={m.id}
@@ -84,17 +92,19 @@ function ModePill({ mode, setMode }) {
                 setOpen(false);
               }}
               className={
-                'w-full text-left px-3 py-2 rounded-lg text-sm flex items-start gap-2 transition ' +
+                'w-full text-left px-3 py-2.5 rounded-xl text-sm flex items-start gap-2 transition ' +
                 (mode === m.id
-                  ? 'bg-zinc-100 dark:bg-white/10'
-                  : 'hover:bg-zinc-50 dark:hover:bg-white/5')
+                  ? 'bg-zinc-100 dark:bg-zinc-800'
+                  : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/70')
               }
             >
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-zinc-900 dark:text-zinc-100">{m.label}</div>
-                <div className="text-[11px] text-zinc-500">{m.hint}</div>
+                <div className="text-[11px] text-zinc-500 mt-0.5">{m.hint}</div>
               </div>
-              {mode === m.id && <Check size={14} className="mt-0.5 text-zinc-700 dark:text-zinc-200 shrink-0" />}
+              {mode === m.id && (
+                <Check size={14} className="mt-0.5 text-zinc-700 dark:text-zinc-200 shrink-0" />
+              )}
             </button>
           ))}
         </div>
@@ -387,6 +397,10 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     setThinkingSteps(['Reading your message']);
     setMessages((prev) => prev.concat([{ role: 'assistant', content: '' }]));
 
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+
     try {
       const response = await api.chatStream(
         mode,
@@ -484,26 +498,31 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
   const displayMessages = waitingFirstChunk ? messages.slice(0, -1) : messages;
 
   const placeholder = imagePreviews.length
-    ? 'Photo attached — ask a question or say improve this…'
+    ? 'Photo attached — ask or say improve this…'
     : forceImageGen
     ? 'Describe the image you want…'
     : 'Message SetrxAI…';
 
+  const canSend =
+    !loading &&
+    !imgLoading &&
+    (input.trim().length > 0 || imagePreviews.length > 0 || !!attachedFile);
+
   const composer = (
     <div className="w-full max-w-2xl mx-auto">
       {imagePreviews.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-2 px-1">
+        <div className="flex flex-wrap gap-2 mb-3 px-1">
           {imagePreviews.map((p, idx) => (
             <div key={idx} className="relative">
               <img
                 src={p.previewUrl}
                 alt=""
-                className="h-14 w-14 object-cover rounded-lg border border-zinc-200 dark:border-white/10"
+                className="h-16 w-16 object-cover rounded-xl border border-zinc-200 dark:border-white/10"
               />
               <button
                 type="button"
                 onClick={() => setImagePreviews((prev) => prev.filter((_, j) => j !== idx))}
-                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-zinc-800 text-white flex items-center justify-center"
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-zinc-900 text-white flex items-center justify-center shadow"
               >
                 <X size={11} />
               </button>
@@ -513,20 +532,38 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
         </div>
       )}
 
-      {parsingFile && <p className="text-xs text-zinc-400 mb-1 px-1">Reading file…</p>}
+      {parsingFile && <p className="text-xs text-zinc-500 mb-2 px-1">Reading file…</p>}
       {attachedFile && !parsingFile && (
-        <div className="flex items-center gap-2 mb-2 text-xs bg-zinc-100 dark:bg-white/5 rounded-lg px-2.5 py-1.5">
-          <FileText size={14} className="text-zinc-500" />
-          <span className="truncate flex-1">{attachedFile.name}</span>
-          <button type="button" onClick={() => setAttachedFile(null)}>
-            <X size={12} />
+        <div className="flex items-center gap-2 mb-2 text-xs bg-zinc-100 dark:bg-zinc-800/80 rounded-xl px-3 py-2 border border-zinc-200 dark:border-white/10">
+          <FileText size={14} className="text-zinc-500 shrink-0" />
+          <span className="truncate flex-1 text-zinc-700 dark:text-zinc-200">{attachedFile.name}</span>
+          <button type="button" onClick={() => setAttachedFile(null)} className="p-0.5">
+            <X size={14} className="text-zinc-500" />
           </button>
         </div>
       )}
-      {fileError && <p className="text-xs text-red-500 mb-1">{fileError}</p>}
+      {fileError && <p className="text-xs text-red-500 mb-2 px-1">{fileError}</p>}
 
-      <div className="flex items-end gap-1 rounded-2xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-1.5 py-1.5 shadow-sm focus-within:border-zinc-400 dark:focus-within:border-white/25 transition-colors">
-        <input type="file" accept="image/*" multiple ref={fileInputRef} onChange={handleImageSelect} className="hidden" />
+      <div
+        className="
+          flex items-end gap-1.5
+          rounded-[28px]
+          border border-zinc-200 dark:border-zinc-700/80
+          bg-white dark:bg-zinc-900
+          shadow-[0_2px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_20px_rgba(0,0,0,0.35)]
+          px-2 py-2
+          focus-within:border-zinc-400 dark:focus-within:border-zinc-500
+          transition-colors
+        "
+      >
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          ref={fileInputRef}
+          onChange={handleImageSelect}
+          className="hidden"
+        />
         <input
           type="file"
           accept=".pdf,.docx,.txt,.csv,.js,.jsx,.ts,.tsx,.py,.json,.md,.html,.css"
@@ -535,29 +572,33 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
           className="hidden"
         />
 
-        <div className="relative" ref={plusMenuRef}>
+        <div className="relative self-end" ref={plusMenuRef}>
           <button
             type="button"
             onClick={() => setShowPlusMenu((o) => !o)}
-            className="p-2.5 rounded-xl text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/10 transition"
+            className="h-10 w-10 flex items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+            aria-label="Attach"
           >
-            <Plus size={20} className={showPlusMenu ? 'rotate-45 transition-transform' : 'transition-transform'} />
+            <Plus
+              size={22}
+              className={showPlusMenu ? 'rotate-45 transition-transform' : 'transition-transform'}
+            />
           </button>
           {showPlusMenu && (
-            <div className="absolute bottom-12 left-0 z-50 min-w-[180px] rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-xl p-1">
+            <div className="absolute bottom-12 left-0 z-50 min-w-[190px] rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl p-1.5">
               <button
                 type="button"
                 onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                className="flex w-full items-center gap-2 px-3 py-2.5 rounded-lg text-sm hover:bg-zinc-100 dark:hover:bg-white/5"
+                className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
               >
-                <Paperclip size={15} /> Photos (max 4)
+                <Paperclip size={16} /> Photos (max 4)
               </button>
               <button
                 type="button"
                 onClick={() => docInputRef.current && docInputRef.current.click()}
-                className="flex w-full items-center gap-2 px-3 py-2.5 rounded-lg text-sm hover:bg-zinc-100 dark:hover:bg-white/5"
+                className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
               >
-                <FileText size={15} /> File
+                <FileText size={16} /> File
               </button>
               <button
                 type="button"
@@ -566,35 +607,51 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
                   setShowPlusMenu(false);
                   setTimeout(() => textareaRef.current && textareaRef.current.focus(), 50);
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2.5 rounded-lg text-sm hover:bg-zinc-100 dark:hover:bg-white/5"
+                className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
               >
-                <Wand2 size={15} /> Generate image
+                <Wand2 size={16} /> Generate image
               </button>
             </div>
           )}
         </div>
 
-        <ModePill mode={mode || 'general'} setMode={setMode} />
+        <div className="self-end pb-0.5">
+          <ModePill mode={mode || 'general'} setMode={setMode} />
+        </div>
 
         <textarea
           ref={textareaRef}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value);
+            const el = e.target;
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+          }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           rows={1}
-          className="flex-1 resize-none bg-transparent text-[15px] text-zinc-900 dark:text-zinc-100 px-1 py-2.5 outline-none max-h-32 placeholder:text-zinc-400"
+          className="
+            flex-1 min-w-0 resize-none bg-transparent
+            text-[15px] leading-6
+            text-zinc-900 dark:text-zinc-100
+            px-1.5 py-2.5
+            outline-none
+            max-h-[140px]
+            placeholder:text-zinc-400 dark:placeholder:text-zinc-500
+          "
         />
 
         <button
           type="button"
           onClick={toggleListening}
           className={
-            'p-2.5 rounded-xl transition ' +
+            'h-10 w-10 flex items-center justify-center rounded-full transition self-end ' +
             (isListening
-              ? 'text-red-500 bg-red-50 dark:bg-red-500/10'
-              : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/10')
+              ? 'text-red-500 bg-red-50 dark:bg-red-500/15'
+              : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800')
           }
+          aria-label="Voice"
         >
           <Mic size={20} />
         </button>
@@ -602,15 +659,21 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
         <button
           type="button"
           onClick={sendMessage}
-          disabled={loading || imgLoading}
-          className="p-2.5 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 disabled:opacity-40 hover:opacity-90 transition shrink-0"
+          disabled={!canSend}
+          className={
+            'h-10 w-10 flex items-center justify-center rounded-full transition self-end shrink-0 ' +
+            (canSend
+              ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-90'
+              : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed')
+          }
+          aria-label="Send"
         >
           <Send size={18} />
         </button>
       </div>
 
       {!isEmpty && (
-        <p className="text-[10px] text-center text-zinc-400 mt-2">
+        <p className="text-[11px] text-center text-zinc-400 dark:text-zinc-500 mt-2.5">
           SetrxAI can make mistakes. Check important info.
         </p>
       )}
@@ -628,11 +691,10 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
         </div>
       )}
 
-      {/* EMPTY: greeting + chatbox CENTERED */}
       {isEmpty ? (
         <div className="flex-1 flex flex-col items-center justify-center px-3 sm:px-4 pb-10">
           <ModeHero />
-          <div className="w-full mt-2">{composer}</div>
+          <div className="w-full mt-6 px-1">{composer}</div>
         </div>
       ) : (
         <>
@@ -663,7 +725,11 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
                   );
                 }
 
-                if (msg.role === 'assistant' && msg.content && msg.content.indexOf('__IMAGE__') === 0) {
+                if (
+                  msg.role === 'assistant' &&
+                  msg.content &&
+                  msg.content.indexOf('__IMAGE__') === 0
+                ) {
                   const rest = msg.content.replace('__IMAGE__', '');
                   const splitAt = rest.indexOf('__PROMPT__');
                   const imgUrl = splitAt >= 0 ? rest.slice(0, splitAt) : rest;
@@ -676,14 +742,25 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
                         className="rounded-2xl overflow-hidden border border-zinc-200 dark:border-white/10 max-w-sm shadow-sm"
                         onClick={() => setLightbox(imgUrl)}
                       >
-                        <img src={imgUrl} alt={imgPrompt} className="w-full object-cover" referrerPolicy="no-referrer" />
+                        <img
+                          src={imgUrl}
+                          alt={imgPrompt}
+                          className="w-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
                       </button>
-                      {imgPrompt ? <p className="text-xs text-zinc-500 mt-1.5">&quot;{imgPrompt}&quot;</p> : null}
+                      {imgPrompt ? (
+                        <p className="text-xs text-zinc-500 mt-1.5">&quot;{imgPrompt}&quot;</p>
+                      ) : null}
                       <div className="flex gap-3 mt-2 text-xs text-zinc-500">
                         <a href={imgUrl} target="_blank" rel="noreferrer" className="hover:underline">
                           Download
                         </a>
-                        <button type="button" className="hover:underline" onClick={() => useImageForEdit(imgUrl)}>
+                        <button
+                          type="button"
+                          className="hover:underline"
+                          onClick={() => useImageForEdit(imgUrl)}
+                        >
                           Edit
                         </button>
                         <button
@@ -710,8 +787,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
             </div>
           </div>
 
-          {/* ACTIVE CHAT: composer BOTTOM */}
-          <div className="shrink-0 border-t border-zinc-200/80 dark:border-white/[0.06] bg-white/90 dark:bg-[#0c0c0f]/95 backdrop-blur-md px-3 sm:px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="shrink-0 bg-zinc-50/95 dark:bg-[#0c0c0f]/95 backdrop-blur-md border-t border-zinc-200/70 dark:border-zinc-800 px-3 sm:px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
             {composer}
           </div>
         </>
