@@ -90,7 +90,10 @@ router.get('/sessions/:id/messages', authMiddleware, async (req, res) => {
 });
 
 router.delete('/sessions/:id', authMiddleware, async (req, res) => {
-  await pool.query('DELETE FROM sessions WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+  await pool.query('DELETE FROM sessions WHERE id = $1 AND user_id = $2', [
+    req.params.id,
+    req.userId,
+  ]);
   res.json({ success: true });
 });
 
@@ -105,7 +108,10 @@ function optionalAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     try {
-      const decoded = require('jsonwebtoken').verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
+      const decoded = require('jsonwebtoken').verify(
+        authHeader.split(' ')[1],
+        process.env.JWT_SECRET
+      );
       req.userId = decoded.userId;
     } catch (e) {}
   }
@@ -115,7 +121,9 @@ function optionalAuth(req, res, next) {
 router.post('/chat', optionalAuth, async (req, res) => {
   const { mode, messages, sessionId, image, images, file } = req.body;
 
-  if (!mode || !modePrompts[mode]) return res.status(400).json({ error: 'Invalid or missing mode' });
+  if (!mode || !modePrompts[mode]) {
+    return res.status(400).json({ error: 'Invalid or missing mode' });
+  }
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Messages array required' });
   }
@@ -143,7 +151,10 @@ router.post('/chat', optionalAuth, async (req, res) => {
       'user',
       savedText,
     ]);
-    const countResult = await pool.query('SELECT COUNT(*) FROM messages WHERE session_id = $1', [sessionId]);
+    const countResult = await pool.query(
+      'SELECT COUNT(*) FROM messages WHERE session_id = $1',
+      [sessionId]
+    );
     if (parseInt(countResult.rows[0].count) === 1) {
       await updateSessionTitle(sessionId, userText || 'Chat');
     }
@@ -162,18 +173,42 @@ router.post('/chat', optionalAuth, async (req, res) => {
     mode,
   });
 
+  // Live thinking step 1 — specific to this message (from brain)
   res.write(
-    'data: ' + JSON.stringify({ thinking: decision.thought || 'Thinking through this' }) + '\n\n'
+    'data: ' +
+      JSON.stringify({ thinking: decision.thought || 'Thinking through this' }) +
+      '\n\n'
   );
 
   let searchContext = null;
   if (decision.search) {
-    res.write('data: ' + JSON.stringify({ thinking: 'Searching the web' }) + '\n\n');
+    res.write(
+      'data: ' + JSON.stringify({ thinking: 'Searching the web for current info' }) + '\n\n'
+    );
     try {
       searchContext = await searchWeb(userText);
+      if (searchContext) {
+        res.write(
+          'data: ' + JSON.stringify({ thinking: 'Reading search results' }) + '\n\n'
+        );
+      }
     } catch (err) {
       console.warn('Search fail:', err.message);
     }
+  }
+
+  if (file) {
+    res.write(
+      'data: ' +
+        JSON.stringify({ thinking: 'Reading attached file: ' + (file.name || 'document') }) +
+        '\n\n'
+    );
+  }
+
+  if (allImages && allImages.length) {
+    res.write(
+      'data: ' + JSON.stringify({ thinking: 'Looking at the attached photo' }) + '\n\n'
+    );
   }
 
   const systemPrompt = modePrompts[mode];
@@ -213,6 +248,20 @@ router.post('/chat', optionalAuth, async (req, res) => {
       const trimmedHistory = trimHistoryForBudget(messages, budget);
       const providerMessages = [{ role: 'system', content: finalSystemPrompt }, ...trimmedHistory];
 
+      // Live thinking step — about to write
+      res.write(
+        'data: ' +
+          JSON.stringify({
+            thinking:
+              mode === 'coding'
+                ? 'Writing the code carefully'
+                : mode === 'study'
+                ? 'Structuring the explanation'
+                : 'Writing the answer',
+          }) +
+          '\n\n'
+      );
+
       try {
         const { content } = await providerCallers[providerName](
           keyEntry.key,
@@ -224,7 +273,11 @@ router.post('/chat', optionalAuth, async (req, res) => {
         let finalContent = content;
 
         if ((mode === 'coding' || mode === 'study') && content && content.length > 80) {
-          res.write('data: ' + JSON.stringify({ thinking: 'Checking the answer' }) + '\n\n');
+          res.write(
+            'data: ' +
+              JSON.stringify({ thinking: 'Checking the answer for mistakes' }) +
+              '\n\n'
+          );
           try {
             const v = await verifyAnswer(userText, content, mode);
             if (!v.ok && v.fixed) {
@@ -237,11 +290,10 @@ router.post('/chat', optionalAuth, async (req, res) => {
         }
 
         if (canSaveToDb) {
-          await pool.query('INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3)', [
-            sessionId,
-            'assistant',
-            finalContent,
-          ]);
+          await pool.query(
+            'INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3)',
+            [sessionId, 'assistant', finalContent]
+          );
         }
 
         res.write('data: ' + JSON.stringify({ done: true, provider: providerName }) + '\n\n');
@@ -252,8 +304,11 @@ router.post('/chat', optionalAuth, async (req, res) => {
       } catch (err) {
         console.error('[' + providerName + '] failed:', err.message);
         const status = err?.status || err?.response?.status;
-        if (status === 429 || status === 413 || status === 503) manager.markCooldown(keyEntry, 60000);
-        else if (status === 401 || status === 403) manager.markCooldown(keyEntry, 300000);
+        if (status === 429 || status === 413 || status === 503) {
+          manager.markCooldown(keyEntry, 60000);
+        } else if (status === 401 || status === 403) {
+          manager.markCooldown(keyEntry, 300000);
+        }
       }
     }
     if (providerSucceeded) break;
