@@ -134,9 +134,9 @@ router.post('/chat', optionalAuth, async (req, res) => {
 
   if (canSaveToDb) {
     const savedText = allImages
-      ? '📷 [Image] ' + userText
+      ? '[Image] ' + userText
       : file
-      ? '📄 [' + file.name + '] ' + userText
+      ? '[' + file.name + '] ' + userText
       : userText;
     await pool.query('INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3)', [
       sessionId,
@@ -162,11 +162,13 @@ router.post('/chat', optionalAuth, async (req, res) => {
     mode,
   });
 
-  res.write('data: ' + JSON.stringify({ thinking: decision.thought || 'Soch raha hoon...' }) + '\n\n');
+  res.write(
+    'data: ' + JSON.stringify({ thinking: decision.thought || 'Thinking through this' }) + '\n\n'
+  );
 
   let searchContext = null;
   if (decision.search) {
-    res.write('data: ' + JSON.stringify({ thinking: 'Web search kar raha hoon...' }) + '\n\n');
+    res.write('data: ' + JSON.stringify({ thinking: 'Searching the web' }) + '\n\n');
     try {
       searchContext = await searchWeb(userText);
     } catch (err) {
@@ -222,7 +224,7 @@ router.post('/chat', optionalAuth, async (req, res) => {
         let finalContent = content;
 
         if ((mode === 'coding' || mode === 'study') && content && content.length > 80) {
-          res.write('data: ' + JSON.stringify({ thinking: 'Reply check kar raha hoon...' }) + '\n\n');
+          res.write('data: ' + JSON.stringify({ thinking: 'Checking the answer' }) + '\n\n');
           try {
             const v = await verifyAnswer(userText, content, mode);
             if (!v.ok && v.fixed) {
@@ -258,7 +260,13 @@ router.post('/chat', optionalAuth, async (req, res) => {
   }
 
   if (!succeeded) {
-    res.write('data: ' + JSON.stringify({ error: 'Sabhi AI providers abhi unavailable hain' }) + '\n\n');
+    res.write(
+      'data: ' +
+        JSON.stringify({
+          error: 'All AI providers are unavailable right now. Please try again in a moment.',
+        }) +
+        '\n\n'
+    );
     res.end();
   }
 });
