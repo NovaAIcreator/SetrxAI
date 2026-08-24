@@ -8,11 +8,20 @@ function getGeminiKey() {
   return null;
 }
 
+function topicHint(userText) {
+  const t = (userText || '').trim().replace(/\s+/g, ' ');
+  if (!t) return '';
+  const short = t.length > 48 ? t.slice(0, 48) + '…' : t;
+  return short;
+}
+
 function fallback(userText, hasImage, mode) {
   const t = (userText || '').toLowerCase();
+  const topic = topicHint(userText);
+
   if (hasImage && !/banao|edit|improve|accha|image|logo/.test(t)) {
     return {
-      thought: 'Reading the photo',
+      thought: topic ? 'Reading the photo about: ' + topic : 'Reading the photo',
       action: 'vision',
       provider: 'gemini',
       search: false,
@@ -20,29 +29,40 @@ function fallback(userText, hasImage, mode) {
   }
   if (/banao|generate image|tasveer|logo bana/.test(t)) {
     return {
-      thought: 'Preparing an image',
+      thought: topic ? 'Planning image: ' + topic : 'Planning the image',
       action: 'image',
       provider: 'flux',
       search: false,
     };
   }
-  if (/news|latest|today|price|2025|2026/.test(t)) {
+  if (/news|latest|today|price|2025|2026|weather|score/.test(t)) {
     return {
-      thought: 'Looking up current information',
+      thought: topic ? 'Looking up: ' + topic : 'Looking up current information',
       action: 'chat',
       provider: 'gemini',
       search: true,
     };
   }
+  if (mode === 'coding') {
+    return {
+      thought: topic ? 'Working through the code for: ' + topic : 'Working through the code',
+      action: 'chat',
+      provider: 'gemini',
+      search: false,
+    };
+  }
+  if (mode === 'study') {
+    return {
+      thought: topic ? 'Breaking down: ' + topic : 'Working through the concept',
+      action: 'chat',
+      provider: 'gemini',
+      search: false,
+    };
+  }
   return {
-    thought:
-      mode === 'coding'
-        ? 'Working through the code'
-        : mode === 'study'
-        ? 'Working through the concept'
-        : 'Thinking through this',
+    thought: topic ? 'Thinking about: ' + topic : 'Thinking through this',
     action: 'chat',
-    provider: mode === 'general' ? 'groq' : 'gemini',
+    provider: 'groq',
     search: false,
   };
 }
@@ -55,27 +75,44 @@ async function think({ userText, hasImage, hasFile, mode }) {
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
       generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 120,
+        temperature: 0.3,
+        maxOutputTokens: 150,
         responseMimeType: 'application/json',
       },
     });
     const r = await model.generateContent(
-      'Route this user message. Mode=' +
-        mode +
-        '. hasImage=' +
-        !!hasImage +
-        '. hasFile=' +
-        !!hasFile +
-        '.\nOutput ONLY JSON: {"thought":"English, max 6 words, no emoji, what you are doing now","action":"chat"|"vision"|"image","provider":"gemini"|"groq","search":false}\nRules: photo+question=vision+gemini; code/study=gemini; casual=groq; image only if user wants a picture made. thought examples: Thinking through this | Reading the photo | Looking up current information | Working through the code\nUser: ' +
-        (userText || '(empty)')
+      `You are a routing brain for SetrxAI.
+Mode=\( {mode}. hasImage= \){!!hasImage}. hasFile=${!!hasFile}.
+
+Output ONLY JSON:
+{"thought":"English, 6-12 words, NO emoji. Must mention the specific topic from the user message (like Grok status lines). Different every time.","action":"chat"|"vision"|"image","provider":"gemini"|"groq","search":false}
+
+Rules:
+- photo + question → vision + gemini
+- code/study → gemini
+- casual chat → groq
+- image only if user wants a picture made
+- search:true only for live/current news/price/weather/score
+
+Good thought examples:
+- "Checking React useEffect dependency rules"
+- "Looking up today's gold price in India"
+- "Outlining photosynthesis exam notes"
+- "Reading the attached photo labels"
+
+User message:
+${userText || '(empty)'}`
     );
     const p = JSON.parse((r.response.text() || '').replace(/```json|```/g, '').trim());
+    let thought = String(p.thought || '')
+      .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
+      .trim()
+      .slice(0, 90);
+    if (!thought || thought.length < 8) {
+      return fallback(userText, hasImage, mode);
+    }
     return {
-      thought: String(p.thought || 'Thinking through this')
-        .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
-        .trim()
-        .slice(0, 60),
+      thought,
       action: p.action || 'chat',
       provider: p.action === 'vision' ? 'gemini' : p.provider || 'gemini',
       search: !!p.search,
