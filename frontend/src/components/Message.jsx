@@ -47,10 +47,18 @@ function ImageLightbox({ src, alt, onClose }) {
       >
         <Download size={18} /> Download
       </button>
-      <button onClick={onClose} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center">
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center"
+      >
         <X size={22} />
       </button>
-      <img src={src} alt={alt} className="max-w-full max-h-full rounded-xl object-contain" onClick={(e) => e.stopPropagation()} />
+      <img
+        src={src}
+        alt={alt}
+        className="max-w-full max-h-full rounded-xl object-contain"
+        onClick={(e) => e.stopPropagation()}
+      />
     </div>
   );
 }
@@ -58,7 +66,12 @@ function ImageLightbox({ src, alt, onClose }) {
 function GeneratedImage({ src, alt, onZoom }) {
   return (
     <div className="relative inline-block group/img my-3">
-      <img src={src} alt={alt} onClick={onZoom} className="rounded-xl max-w-full sm:max-w-md shadow-lg cursor-zoom-in" />
+      <img
+        src={src}
+        alt={alt}
+        onClick={onZoom}
+        className="rounded-xl max-w-full sm:max-w-md shadow-lg cursor-zoom-in"
+      />
       <button
         onClick={async (e) => {
           e.stopPropagation();
@@ -88,7 +101,7 @@ function Message({ role, content }) {
   if (isUser) {
     return (
       <div className="flex justify-end mb-5 px-2 sm:px-4">
-        <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-br-md px-4 py-2.5 text-base leading-relaxed bg-gradient-to-br from-purple-600 to-fuchsia-600 text-white shadow-md">
+        <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-br-md px-4 py-2.5 text-base leading-relaxed bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-md whitespace-pre-wrap">
           {content}
         </div>
       </div>
@@ -98,24 +111,34 @@ function Message({ role, content }) {
   return (
     <div className="mb-7 px-2 sm:px-4">
       <div className="flex items-center gap-2 mb-2">
-        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-xs">✨</div>
-        <span className="text-xs font-medium text-zinc-500">SetrxAI</span>
+        <span className="text-xs font-medium tracking-wide text-zinc-500">SetrxAI</span>
       </div>
 
-      <div ref={bubbleRef} className="max-w-full md:max-w-3xl text-base sm:text-lg leading-relaxed text-zinc-800 dark:text-zinc-200">
+      <div
+        ref={bubbleRef}
+        className="max-w-full md:max-w-3xl text-base sm:text-lg leading-relaxed text-zinc-800 dark:text-zinc-200"
+      >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           rehypePlugins={[rehypeHighlight]}
           components={{
-            h2: ({ children }) => <h2 className="text-xl sm:text-2xl font-bold mt-5 mb-2 first:mt-0 text-zinc-900 dark:text-white">{children}</h2>,
-            h3: ({ children }) => <h3 className="text-lg sm:text-xl font-semibold mt-4 mb-2 first:mt-0">{children}</h3>,
+            h2: ({ children }) => (
+              <h2 className="text-xl sm:text-2xl font-bold mt-5 mb-2 first:mt-0 text-zinc-900 dark:text-white">
+                {children}
+              </h2>
+            ),
+            h3: ({ children }) => (
+              <h3 className="text-lg sm:text-xl font-semibold mt-4 mb-2 first:mt-0">{children}</h3>
+            ),
             p: ({ children }) => <p className="mb-3 last:mb-0 leading-relaxed">{children}</p>,
-            strong: ({ children }) => <strong className="font-semibold text-purple-600 dark:text-purple-400">{children}</strong>,
+            strong: ({ children }) => (
+              <strong className="font-semibold text-zinc-900 dark:text-zinc-100">{children}</strong>
+            ),
             ul: ({ children }) => <ul className="list-disc pl-5 mb-3 space-y-1.5">{children}</ul>,
             ol: ({ children }) => <ol className="list-decimal pl-5 mb-3 space-y-1.5">{children}</ol>,
             li: ({ children }) => <li className="pl-0.5">{children}</li>,
             blockquote: ({ children }) => (
-              <blockquote className="border-l-4 border-purple-400 bg-purple-50 dark:bg-purple-500/10 pl-3 py-2 my-3 rounded-r-lg text-base">
+              <blockquote className="border-l-4 border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-white/5 pl-3 py-2 my-3 rounded-r-lg text-base">
                 {children}
               </blockquote>
             ),
@@ -124,12 +147,25 @@ function Message({ role, content }) {
                 <table className="w-full text-sm border-collapse">{children}</table>
               </div>
             ),
-            th: ({ children }) => <th className="border border-zinc-300 dark:border-zinc-700 px-2 py-1.5 bg-zinc-100 dark:bg-white/5 text-left font-semibold">{children}</th>,
-            td: ({ children }) => <td className="border border-zinc-300 dark:border-zinc-700 px-2 py-1.5">{children}</td>,
-            img: ({ src, alt }) => <GeneratedImage src={src} alt={alt} onZoom={() => setLightboxImage({ src, alt })} />,
+            th: ({ children }) => (
+              <th className="border border-zinc-300 dark:border-zinc-700 px-2 py-1.5 bg-zinc-100 dark:bg-white/5 text-left font-semibold">
+                {children}
+              </th>
+            ),
+            td: ({ children }) => (
+              <td className="border border-zinc-300 dark:border-zinc-700 px-2 py-1.5">{children}</td>
+            ),
+            img: ({ src, alt }) => (
+              <GeneratedImage src={src} alt={alt} onZoom={() => setLightboxImage({ src, alt })} />
+            ),
             code({ inline, className, children, ...props }) {
               return inline ? (
-                <code className="bg-zinc-200 dark:bg-white/10 px-1.5 py-0.5 rounded text-[0.85em]" {...props}>{children}</code>
+                <code
+                  className="bg-zinc-200 dark:bg-white/10 px-1.5 py-0.5 rounded text-[0.85em]"
+                  {...props}
+                >
+                  {children}
+                </code>
               ) : (
                 <CodeBlock className={className}>{children}</CodeBlock>
               );
@@ -153,7 +189,7 @@ function Message({ role, content }) {
             window.speechSynthesis.speak(u);
             setSpeaking(true);
           }}
-          className="flex items-center gap-1 text-xs text-zinc-500 hover:text-purple-500"
+          className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
         >
           {speaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
           {speaking ? 'Stop' : 'Listen'}
@@ -165,7 +201,9 @@ function Message({ role, content }) {
               setDownloading(true);
               try {
                 const canvas = await html2canvas(bubbleRef.current, {
-                  backgroundColor: document.documentElement.classList.contains('dark') ? '#0a0a12' : '#ffffff',
+                  backgroundColor: document.documentElement.classList.contains('dark')
+                    ? '#0a0a12'
+                    : '#ffffff',
                   scale: 2,
                 });
                 const a = document.createElement('a');
@@ -177,7 +215,7 @@ function Message({ role, content }) {
               }
             }}
             disabled={downloading}
-            className="flex items-center gap-1 text-xs text-zinc-500 hover:text-purple-500"
+            className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
           >
             {downloading ? <Loader2 size={14} className="animate-spin" /> : <ImageDown size={14} />}
             {downloading ? '...' : 'Save image'}
@@ -186,7 +224,11 @@ function Message({ role, content }) {
       </div>
 
       {lightboxImage && (
-        <ImageLightbox src={lightboxImage.src} alt={lightboxImage.alt} onClose={() => setLightboxImage(null)} />
+        <ImageLightbox
+          src={lightboxImage.src}
+          alt={lightboxImage.alt}
+          onClose={() => setLightboxImage(null)}
+        />
       )}
     </div>
   );
