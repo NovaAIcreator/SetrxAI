@@ -720,3 +720,4 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
       </div>
     </div>
   );
+}
