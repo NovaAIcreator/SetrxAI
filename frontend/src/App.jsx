@@ -1,4 +1,4 @@
-              import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SEOHead from './components/SEOHead';
 
@@ -29,7 +29,8 @@ export default function App({ defaultMode = 'general' }) {
 
   const [mode, setMode] = useState(defaultMode);
 
-  const [theme, setTheme] = useState(() => localStorage.getItem('setrxai_theme') || 'dark');
+  // Default theme = light (white). User can change later in Profile.
+  const [theme, setTheme] = useState(() => localStorage.getItem('setrxai_theme') || 'light');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [sessions, setSessions] = useState([]);
@@ -226,14 +227,14 @@ export default function App({ defaultMode = 'general' }) {
 
   if (checkingAuth) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-zinc-100 dark:bg-[#0a0a0b]">
+      <div className="h-screen w-screen flex items-center justify-center bg-zinc-50 dark:bg-[#0a0a0b]">
         <Logo size={48} />
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-screen flex bg-zinc-100 dark:bg-[#0a0a0b] text-zinc-900 dark:text-zinc-100 overflow-hidden">
+    <div className="h-screen w-screen flex bg-zinc-50 dark:bg-[#0a0a0b] text-zinc-900 dark:text-zinc-100 overflow-hidden">
       <SEOHead mode={mode} />
 
       <Sidebar
