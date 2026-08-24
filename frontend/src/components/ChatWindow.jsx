@@ -1,15 +1,41 @@
 import { useState, useEffect, useRef } from 'react';
-import { Paperclip, Mic, Send, X, FileText, Wand2, Plus } from 'lucide-react';
+import {
+  Paperclip,
+  Mic,
+  Send,
+  X,
+  FileText,
+  Wand2,
+  Plus,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import Message from './Message';
 import ModeHero from './ModeHero';
 import { api } from '../api';
 
-function ThinkingBar({ text }) {
-  if (!text) return null;
+function ThinkingPanel({ steps }) {
+  const [open, setOpen] = useState(true);
+  if (!steps || steps.length === 0) return null;
   return (
-    <div className="flex items-center gap-2.5 px-1 mb-3 text-[13px] text-zinc-500 dark:text-zinc-400">
-      <span className="w-3.5 h-3.5 border-2 border-zinc-300 dark:border-zinc-600 border-t-zinc-700 dark:border-t-zinc-200 rounded-full animate-spin shrink-0" />
-      <span className="italic">{text}</span>
+    <div className="mb-4 px-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 text-[13px] text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+      >
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        <span className="font-medium">Thinking</span>
+      </button>
+      {open && (
+        <div className="mt-1.5 ml-5 space-y-1 border-l border-zinc-200 dark:border-white/10 pl-3">
+          {steps.map((s, i) => (
+            <p key={i} className="text-[13px] text-zinc-500 dark:text-zinc-400 leading-snug">
+              {s}
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -17,28 +43,59 @@ function ThinkingBar({ text }) {
 function ImageGeneratingAnimation() {
   const [step, setStep] = useState(0);
   const steps = [
-    'Understanding your request…',
-    'Composing the image…',
-    'Adding detail…',
-    'Almost ready…',
+    'Understanding your request',
+    'Composing the image',
+    'Adding detail',
+    'Almost ready',
   ];
   useEffect(() => {
     const t = setInterval(() => setStep((p) => (p < steps.length - 1 ? p + 1 : p)), 2200);
     return () => clearInterval(t);
   }, []);
-  return <ThinkingBar text={steps[step]} />;
+  return <ThinkingPanel steps={[steps[step]]} />;
 }
 
 const IMAGE_KEYWORDS = [
-  'image', 'photo', 'picture', 'draw', 'generate image', 'create image',
-  'banao image', 'tasveer', 'wallpaper', 'poster', 'illustration', 'banao', 'bana do',
+  'image',
+  'photo',
+  'picture',
+  'draw',
+  'generate image',
+  'create image',
+  'banao image',
+  'tasveer',
+  'wallpaper',
+  'poster',
+  'illustration',
+  'banao',
+  'bana do',
 ];
 const EDIT_KEYWORDS = [
-  'edit', 'improve', 'enhance', 'better', 'fix', 'accha', 'acha',
-  'sudhar', 'badal', 'hd', 'quality', 'clear', 'sharp',
+  'edit',
+  'improve',
+  'enhance',
+  'better',
+  'fix',
+  'accha',
+  'acha',
+  'sudhar',
+  'badal',
+  'hd',
+  'quality',
+  'clear',
+  'sharp',
 ];
 const SEARCH_KEYWORDS = [
-  'search', 'latest', 'news', 'today', 'current', 'price', 'weather', 'score', '2025', '2026',
+  'search',
+  'latest',
+  'news',
+  'today',
+  'current',
+  'price',
+  'weather',
+  'score',
+  '2025',
+  '2026',
 ];
 
 function detectIntent(text, hasPhoto, forceImageGen) {
@@ -50,11 +107,11 @@ function detectIntent(text, hasPhoto, forceImageGen) {
   return null;
 }
 
-export default function ChatWindow({ mode, sessionId, messages, setMessages, isGuest }) {
+export default function ChatWindow({ mode, setMode, sessionId, messages, setMessages, isGuest }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [waitingFirstChunk, setWaitingFirstChunk] = useState(false);
-  const [thinkingText, setThinkingText] = useState('');
+  const [thinkingSteps, setThinkingSteps] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const [isListening, setIsListening] = useState(false);
   const [imgLoading, setImgLoading] = useState(false);
@@ -92,7 +149,7 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
       c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
       shouldScrollRef.current = false;
     }
-  }, [messages, thinkingText]);
+  }, [messages, thinkingSteps]);
 
   useEffect(() => {
     const h = (e) => {
@@ -115,6 +172,19 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
     r.onerror = () => setIsListening(false);
     recognitionRef.current = r;
   }, []);
+
+  const pushThinking = (text) => {
+    const t = String(text || '')
+      .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
+      .trim();
+    if (!t) return;
+    setThinkingSteps((prev) => {
+      if (prev[prev.length - 1] === t) return prev;
+      return prev.concat([t]).slice(-8);
+    });
+  };
+
+  const clearThinking = () => setThinkingSteps([]);
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
@@ -283,7 +353,7 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
     setForceImageGen(false);
     setLoading(true);
     setWaitingFirstChunk(true);
-    setThinkingText('Thinking…');
+    setThinkingSteps(['Thinking']);
     if (intent === 'search') setIsSearching(true);
     setMessages((prev) => prev.concat([{ role: 'assistant', content: '' }]));
 
@@ -316,12 +386,12 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
             const parsed = JSON.parse(jsonStr);
 
             if (parsed.thinking) {
-              setThinkingText(parsed.thinking);
+              pushThinking(parsed.thinking);
               setWaitingFirstChunk(true);
             }
 
             if (parsed.replace) {
-              setThinkingText('');
+              clearThinking();
               setWaitingFirstChunk(false);
               setMessages((prev) => {
                 const u = prev.slice();
@@ -331,7 +401,7 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
             }
 
             if (parsed.chunk) {
-              setThinkingText('');
+              clearThinking();
               setWaitingFirstChunk(false);
               setIsSearching(false);
               setMessages((prev) => {
@@ -343,7 +413,7 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
             }
 
             if (parsed.error) {
-              setThinkingText('');
+              clearThinking();
               setWaitingFirstChunk(false);
               setIsSearching(false);
               setMessages((prev) => {
@@ -356,7 +426,7 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
         }
       }
     } catch (err) {
-      setThinkingText('');
+      clearThinking();
       setWaitingFirstChunk(false);
       setIsSearching(false);
       setMessages((prev) => {
@@ -368,7 +438,7 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
       setLoading(false);
       setWaitingFirstChunk(false);
       setIsSearching(false);
-      setThinkingText('');
+      clearThinking();
     }
   };
 
@@ -444,9 +514,6 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
                 return (
                   <div key={i} className="mb-6">
                     <div className="flex items-center gap-2 mb-2">
-                      <div className="w-6 h-6 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center text-[10px]">
-                        ✨
-                      </div>
                       <span className="text-xs text-zinc-500">SetrxAI</span>
                     </div>
                     <button
@@ -490,10 +557,10 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
               return <Message key={i} role={msg.role} content={msg.content} />;
             })}
 
-          {!isEmpty && (thinkingText || (waitingFirstChunk && !isSearching)) && (
-            <ThinkingBar text={thinkingText || 'Thinking…'} />
+          {!isEmpty && thinkingSteps.length > 0 && <ThinkingPanel steps={thinkingSteps} />}
+          {!isEmpty && isSearching && thinkingSteps.length === 0 && (
+            <ThinkingPanel steps={['Searching the web']} />
           )}
-          {!isEmpty && isSearching && <ThinkingBar text="Searching the web…" />}
           {!isEmpty && imgLoading && <ImageGeneratingAnimation />}
         </div>
       </div>
@@ -529,107 +596,4 @@ export default function ChatWindow({ mode, sessionId, messages, setMessages, isG
             </div>
           )}
 
-          {parsingFile && <p className="text-xs text-zinc-400 mb-1 italic">Reading file…</p>}
-          {attachedFile && !parsingFile && (
-            <div className="flex items-center gap-2 mb-2 text-xs bg-zinc-100 dark:bg-white/5 rounded-lg px-2.5 py-1.5">
-              <FileText size={14} className="text-zinc-500" />
-              <span className="truncate flex-1">{attachedFile.name}</span>
-              <button type="button" onClick={() => setAttachedFile(null)}>
-                <X size={12} />
-              </button>
-            </div>
-          )}
-          {fileError && <p className="text-xs text-red-500 mb-1">{fileError}</p>}
-
-          <div className="flex items-end gap-1 rounded-2xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/[0.04] px-1.5 py-1.5 shadow-sm focus-within:border-zinc-400 dark:focus-within:border-white/25 transition-colors">
-            <input type="file" accept="image/*" multiple ref={fileInputRef} onChange={handleImageSelect} className="hidden" />
-            <input
-              type="file"
-              accept=".pdf,.docx,.txt,.csv,.js,.jsx,.ts,.tsx,.py,.json,.md,.html,.css"
-              ref={docInputRef}
-              onChange={handleDocSelect}
-              className="hidden"
-            />
-
-            <div className="relative" ref={plusMenuRef}>
-              <button
-                type="button"
-                onClick={() => setShowPlusMenu((o) => !o)}
-                className="p-2.5 rounded-xl text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/10 transition"
-              >
-                <Plus size={20} className={showPlusMenu ? 'rotate-45 transition-transform' : 'transition-transform'} />
-              </button>
-              {showPlusMenu && (
-                <div className="absolute bottom-12 left-0 z-50 min-w-[180px] rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-xl p-1">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                    className="flex w-full items-center gap-2 px-3 py-2.5 rounded-lg text-sm hover:bg-zinc-100 dark:hover:bg-white/5"
-                  >
-                    <Paperclip size={15} /> Photos (max 4)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => docInputRef.current && docInputRef.current.click()}
-                    className="flex w-full items-center gap-2 px-3 py-2.5 rounded-lg text-sm hover:bg-zinc-100 dark:hover:bg-white/5"
-                  >
-                    <FileText size={15} /> File
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setForceImageGen(true);
-                      setShowPlusMenu(false);
-                      setTimeout(() => textareaRef.current && textareaRef.current.focus(), 50);
-                    }}
-                    className="flex w-full items-center gap-2 px-3 py-2.5 rounded-lg text-sm hover:bg-zinc-100 dark:hover:bg-white/5"
-                  >
-                    <Wand2 size={15} /> Generate image
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              rows={1}
-              className="flex-1 resize-none bg-transparent text-[15px] text-zinc-900 dark:text-zinc-100 px-1 py-2.5 outline-none max-h-32 placeholder:text-zinc-400"
-            />
-
-            <button
-              type="button"
-              onClick={toggleListening}
-              className={
-                'p-2.5 rounded-xl transition ' +
-                (isListening
-                  ? 'text-red-500 bg-red-50 dark:bg-red-500/10'
-                  : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-white/10')
-              }
-            >
-              <Mic size={20} />
-            </button>
-
-            <button
-              type="button"
-              onClick={sendMessage}
-              disabled={loading || imgLoading}
-              className="p-2.5 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 disabled:opacity-40 hover:opacity-90 transition shrink-0"
-            >
-              <Send size={18} />
-            </button>
-          </div>
-
-          {!isEmpty && (
-            <p className="text-[10px] text-center text-zinc-400 mt-2">
-              SetrxAI can make mistakes. Check important info.
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+          {parsingFile && <p className="text-xs text
