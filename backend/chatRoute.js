@@ -41,6 +41,22 @@ function estimateTokens(text) {
   return Math.ceil((text || '').length / 4);
 }
 
+function wantsLongForm(text) {
+  return /\b(notes|full code|complete file|explain in detail|detailed|step by step|pura code|poora|saari|chapter|essay|write a|replace.*file|entire file|full file|detailed notes|revision notes)\b/i.test(
+    String(text || '')
+  );
+}
+
+function maxTokensFor(mode, userText) {
+  const t = String(userText || '');
+  const long = wantsLongForm(t);
+  if (mode === 'coding' && long) return 4000;
+  if (mode === 'coding') return 2500;
+  if (mode === 'study' && long) return 2500;
+  if (t.length < 180) return 450;
+  return 900;
+}
+
 function trimHistoryForBudget(messages, maxTokens) {
   if (messages.length <= KEEP_FIRST_N) return messages;
   const firstChunk = messages.slice(0, KEEP_FIRST_N);
@@ -90,10 +106,9 @@ router.get('/sessions/:id/messages', authMiddleware, async (req, res) => {
 });
 
 router.delete('/sessions/:id', authMiddleware, async (req, res) => {
-  await pool.query('DELETE FROM sessions WHERE id = $1 AND user_id = $2', [
-    req.params.id,
-    req.userId,
-  ]);
+  await pool.query('    'DELETE FROM sessions WHERE id = $1 AND user_id = $2',
+    [req.params.id, req.userId]
+  );
   res.json({ success: true });
 });
 
@@ -132,20 +147,25 @@ router.post('/chat', optionalAuth, async (req, res) => {
     images && Array.isArray(images) && images.length
       ? images.slice(0, 4)
       : image
-      ? [image]
-      : null;
+        ? [image]
+        : null;
 
   const lastUserMessage = messages[messages.length - 1];
   const userText = lastUserMessage?.content || '';
   const isValidSessionId = sessionId && !isNaN(Number(sessionId));
   const canSaveToDb = isValidSessionId && req.userId;
+  const lang = modePrompts.detectReplyLang ? modePrompts.detectReplyLang(userText) : 'english';
+  const genOptions = {
+    temperature: 0.28,
+    max_tokens: maxTokensFor(mode, userText),
+  };
 
   if (canSaveToDb) {
     const savedText = allImages
       ? '[Image] ' + userText
       : file
-      ? '[' + file.name + '] ' + userText
-      : userText;
+        ? '[' + file.name + '] ' + userText
+        : userText;
     await pool.query('INSERT INTO messages (session_id, role, content) VALUES ($1, $2, $3)', [
       sessionId,
       'user',
@@ -173,7 +193,6 @@ router.post('/chat', optionalAuth, async (req, res) => {
     mode,
   });
 
-  // Live thinking step 1 — specific to this message (from brain)
   res.write(
     'data: ' +
       JSON.stringify({ thinking: decision.thought || 'Thinking through this' }) +
@@ -211,7 +230,6 @@ router.post('/chat', optionalAuth, async (req, res) => {
     );
   }
 
-  const systemPrompt = modePrompts[mode];
   const currentDate = new Date().toLocaleDateString('en-IN', {
     year: 'numeric',
     month: 'long',
@@ -220,8 +238,24 @@ router.post('/chat', optionalAuth, async (req, res) => {
   const dateNote = "\n\nToday's date: " + currentDate + '.';
   const searchNote = searchContext ? '\n\nLive web search results:\n' + searchContext : '';
   const fileNote = file ? '\n\nUser attached file "' + file.name + '":\n' + file.text : '';
-  const finalSystemPrompt = systemPrompt + dateNote + searchNote + fileNote;
+  const langNote =
+    lang === 'hinglish'
+      ? '\n\nUser language detected: Hinglish (Roman script). Reply Hinglish only. Zero Devanagari.'
+      : lang === 'hindi'
+        ? '\n\nUser language detected: Hindi Devanagari. Reply in Hindi.'
+        : '\n\nUser language detected: English. Reply in English.';
+  const extra = dateNote + searchNote + fileNote + langNote;
+  const finalSystemPrompt = modePrompts.buildSystemPrompt
+    ? modePrompts.buildSystemPrompt(mode, extra, userText)
+    : modePrompts[mode] + extra;
   const systemTokens = estimateTokens(finalSystemPrompt);
+
+  const cleanMessages = messages
+    .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && m.content)
+    .map((m) => ({
+      role: m.role,
+      content: String(m.content).slice(0, 12000),
+    }));
 
   let order;
   if (decision.action === 'vision' || (allImages && allImages.length)) {
@@ -245,10 +279,9 @@ router.post('/chat', optionalAuth, async (req, res) => {
       if (!keyEntry) break;
 
       const budget = (PROVIDER_TOKEN_BUDGET[providerName] || 6800) - systemTokens;
-      const trimmedHistory = trimHistoryForBudget(messages, budget);
+      const trimmedHistory = trimHistoryForBudget(cleanMessages, budget);
       const providerMessages = [{ role: 'system', content: finalSystemPrompt }, ...trimmedHistory];
 
-      // Live thinking step — about to write
       res.write(
         'data: ' +
           JSON.stringify({
@@ -256,8 +289,8 @@ router.post('/chat', optionalAuth, async (req, res) => {
               mode === 'coding'
                 ? 'Writing the code carefully'
                 : mode === 'study'
-                ? 'Structuring the explanation'
-                : 'Writing the answer',
+                  ? 'Structuring the explanation'
+                  : 'Writing the answer',
           }) +
           '\n\n'
       );
@@ -267,12 +300,15 @@ router.post('/chat', optionalAuth, async (req, res) => {
           keyEntry.key,
           providerMessages,
           (chunk) => res.write('data: ' + JSON.stringify({ chunk }) + '\n\n'),
-          allImages
+          allImages,
+          genOptions
         );
 
         let finalContent = content;
 
-        if ((mode === 'coding' || mode === 'study') && content && content.length > 80) {
+        const shouldVerify =
+          mode === 'coding' && content && content.length > 80 && wantsLongForm(userText);
+        if (shouldVerify) {
           res.write(
             'data: ' +
               JSON.stringify({ thinking: 'Checking the answer for mistakes' }) +
