@@ -6,7 +6,7 @@ async function callGemini(apiKey, messages, onChunk, imageData, options = {}) {
     model: 'gemini-2.5-flash',
     generationConfig: {
       temperature: options.temperature ?? 0.28,
-      maxOutputTokens: options.max_tokens ?? 900,
+      maxOutputTokens: options.max_tokens ?? 2200,
     },
   });
 
