@@ -545,27 +545,39 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
 
       <div
         className="
-          rounded-[32px]
-          p-[3px]
-          bg-gradient-to-b from-zinc-200/90 to-zinc-300/50
-          dark:from-zinc-600/40 dark:to-zinc-800/60
-          border border-zinc-300/70 dark:border-zinc-600/40
-          shadow-[0_10px_40px_rgba(0,0,0,0.10),0_2px_8px_rgba(0,0,0,0.04)]
-          dark:shadow-[0_16px_50px_rgba(0,0,0,0.55),0_2px_10px_rgba(0,0,0,0.3)]
-          focus-within:from-zinc-300/90 focus-within:to-zinc-400/40
-          dark:focus-within:from-zinc-500/35 dark:focus-within:to-zinc-700/50
-          transition-all
+          rounded-[28px]
+          border border-zinc-200 dark:border-zinc-700/70
+          bg-white dark:bg-[#18181b]
+          shadow-[0_8px_30px_rgba(0,0,0,0.08)]
+          dark:shadow-[0_12px_40px_rgba(0,0,0,0.45)]
+          overflow-hidden
         "
       >
-        <div
-          className="
-            flex items-end gap-1.5
-            rounded-[29px]
-            bg-white dark:bg-[#18181b]
-            border border-zinc-100/80 dark:border-white/[0.06]
-            px-2 py-2
-          "
-        >
+        <div className="px-4 pt-3 pb-2">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+              const el = e.target;
+              el.style.height = 'auto';
+              el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            rows={1}
+            className="
+              w-full resize-none bg-transparent
+              text-[15px] leading-6
+              text-zinc-900 dark:text-zinc-100
+              outline-none
+              max-h-[160px]
+              placeholder:text-zinc-400 dark:placeholder:text-zinc-500
+            "
+          />
+        </div>
+
+        <div className="flex items-center gap-1 px-2 pb-2 pt-1 border-t border-zinc-100 dark:border-white/[0.06]">
           <input
             type="file"
             accept="image/*"
@@ -582,7 +594,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
             className="hidden"
           />
 
-          <div className="relative self-end" ref={plusMenuRef}>
+          <div className="relative" ref={plusMenuRef}>
             <button
               type="button"
               onClick={() => setShowPlusMenu((o) => !o)}
@@ -625,38 +637,15 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
             )}
           </div>
 
-          <div className="self-end pb-0.5">
-            <ModePill mode={mode || 'general'} setMode={setMode} />
-          </div>
+          <ModePill mode={mode || 'general'} setMode={setMode} />
 
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              const el = e.target;
-              el.style.height = 'auto';
-              el.style.height = Math.min(el.scrollHeight, 140) + 'px';
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            rows={1}
-            className="
-              flex-1 min-w-0 resize-none bg-transparent
-              text-[15px] leading-6
-              text-zinc-900 dark:text-zinc-100
-              px-1.5 py-2.5
-              outline-none
-              max-h-[140px]
-              placeholder:text-zinc-400 dark:placeholder:text-zinc-500
-            "
-          />
+          <div className="flex-1" />
 
           <button
             type="button"
             onClick={toggleListening}
             className={
-              'h-10 w-10 flex items-center justify-center rounded-full transition self-end ' +
+              'h-10 w-10 flex items-center justify-center rounded-full transition ' +
               (isListening
                 ? 'text-red-500 bg-red-50 dark:bg-red-500/15'
                 : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800')
@@ -671,7 +660,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
             onClick={sendMessage}
             disabled={!canSend}
             className={
-              'h-10 w-10 flex items-center justify-center rounded-full transition self-end shrink-0 ' +
+              'h-10 w-10 flex items-center justify-center rounded-full transition shrink-0 ' +
               (canSend
                 ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-90'
                 : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed')
