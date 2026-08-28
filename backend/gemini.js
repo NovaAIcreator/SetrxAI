@@ -1,8 +1,14 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-async function callGemini(apiKey, messages, onChunk, imageData) {
+async function callGemini(apiKey, messages, onChunk, imageData, options = {}) {
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    generationConfig: {
+      temperature: options.temperature ?? 0.28,
+      maxOutputTokens: options.max_tokens ?? 900,
+    },
+  });
 
   const systemMsg = messages.find((m) => m.role === 'system');
   const otherMsgs = messages.filter((m) => m.role !== 'system');
