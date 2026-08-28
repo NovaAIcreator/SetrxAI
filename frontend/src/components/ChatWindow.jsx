@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import {
   Paperclip,
@@ -546,130 +545,142 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
 
       <div
         className="
-          flex items-end gap-1.5
-          rounded-[28px]
-          border border-zinc-200 dark:border-zinc-700/80
-          bg-white dark:bg-zinc-900
-          shadow-[0_2px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_20px_rgba(0,0,0,0.35)]
-          px-2 py-2
-          focus-within:border-zinc-400 dark:focus-within:border-zinc-500
-          transition-colors
+          rounded-[32px]
+          p-[3px]
+          bg-gradient-to-b from-zinc-200/90 to-zinc-300/50
+          dark:from-zinc-600/40 dark:to-zinc-800/60
+          border border-zinc-300/70 dark:border-zinc-600/40
+          shadow-[0_10px_40px_rgba(0,0,0,0.10),0_2px_8px_rgba(0,0,0,0.04)]
+          dark:shadow-[0_16px_50px_rgba(0,0,0,0.55),0_2px_10px_rgba(0,0,0,0.3)]
+          focus-within:from-zinc-300/90 focus-within:to-zinc-400/40
+          dark:focus-within:from-zinc-500/35 dark:focus-within:to-zinc-700/50
+          transition-all
         "
       >
-        <input
-          type="file"
-          accept="image/*"
-          multiple
-          ref={fileInputRef}
-          onChange={handleImageSelect}
-          className="hidden"
-        />
-        <input
-          type="file"
-          accept=".pdf,.docx,.txt,.csv,.js,.jsx,.ts,.tsx,.py,.json,.md,.html,.css"
-          ref={docInputRef}
-          onChange={handleDocSelect}
-          className="hidden"
-        />
+        <div
+          className="
+            flex items-end gap-1.5
+            rounded-[29px]
+            bg-white dark:bg-[#18181b]
+            border border-zinc-100/80 dark:border-white/[0.06]
+            px-2 py-2
+          "
+        >
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            ref={fileInputRef}
+            onChange={handleImageSelect}
+            className="hidden"
+          />
+          <input
+            type="file"
+            accept=".pdf,.docx,.txt,.csv,.js,.jsx,.ts,.tsx,.py,.json,.md,.html,.css"
+            ref={docInputRef}
+            onChange={handleDocSelect}
+            className="hidden"
+          />
 
-        <div className="relative self-end" ref={plusMenuRef}>
+          <div className="relative self-end" ref={plusMenuRef}>
+            <button
+              type="button"
+              onClick={() => setShowPlusMenu((o) => !o)}
+              className="h-10 w-10 flex items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+              aria-label="Attach"
+            >
+              <Plus
+                size={22}
+                className={showPlusMenu ? 'rotate-45 transition-transform' : 'transition-transform'}
+              />
+            </button>
+            {showPlusMenu && (
+              <div className="absolute bottom-12 left-0 z-50 min-w-[190px] rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl p-1.5">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                  className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                >
+                  <Paperclip size={16} /> Photos (max 4)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => docInputRef.current && docInputRef.current.click()}
+                  className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                >
+                  <FileText size={16} /> File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForceImageGen(true);
+                    setShowPlusMenu(false);
+                    setTimeout(() => textareaRef.current && textareaRef.current.focus(), 50);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                >
+                  <Wand2 size={16} /> Generate image
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="self-end pb-0.5">
+            <ModePill mode={mode || 'general'} setMode={setMode} />
+          </div>
+
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+              const el = e.target;
+              el.style.height = 'auto';
+              el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            rows={1}
+            className="
+              flex-1 min-w-0 resize-none bg-transparent
+              text-[15px] leading-6
+              text-zinc-900 dark:text-zinc-100
+              px-1.5 py-2.5
+              outline-none
+              max-h-[140px]
+              placeholder:text-zinc-400 dark:placeholder:text-zinc-500
+            "
+          />
+
           <button
             type="button"
-            onClick={() => setShowPlusMenu((o) => !o)}
-            className="h-10 w-10 flex items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
-            aria-label="Attach"
+            onClick={toggleListening}
+            className={
+              'h-10 w-10 flex items-center justify-center rounded-full transition self-end ' +
+              (isListening
+                ? 'text-red-500 bg-red-50 dark:bg-red-500/15'
+                : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800')
+            }
+            aria-label="Voice"
           >
-            <Plus
-              size={22}
-              className={showPlusMenu ? 'rotate-45 transition-transform' : 'transition-transform'}
-            />
+            <Mic size={20} />
           </button>
-          {showPlusMenu && (
-            <div className="absolute bottom-12 left-0 z-50 min-w-[190px] rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl p-1.5">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              >
-                <Paperclip size={16} /> Photos (max 4)
-              </button>
-              <button
-                type="button"
-                onClick={() => docInputRef.current && docInputRef.current.click()}
-                className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              >
-                <FileText size={16} /> File
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setForceImageGen(true);
-                  setShowPlusMenu(false);
-                  setTimeout(() => textareaRef.current && textareaRef.current.focus(), 50);
-                }}
-                className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              >
-                <Wand2 size={16} /> Generate image
-              </button>
-            </div>
-          )}
+
+          <button
+            type="button"
+            onClick={sendMessage}
+            disabled={!canSend}
+            className={
+              'h-10 w-10 flex items-center justify-center rounded-full transition self-end shrink-0 ' +
+              (canSend
+                ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-90'
+                : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed')
+            }
+            aria-label="Send"
+          >
+            <Send size={18} />
+          </button>
         </div>
-
-        <div className="self-end pb-0.5">
-          <ModePill mode={mode || 'general'} setMode={setMode} />
-        </div>
-
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => {
-            setInput(e.target.value);
-            const el = e.target;
-            el.style.height = 'auto';
-            el.style.height = Math.min(el.scrollHeight, 140) + 'px';
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          rows={1}
-          className="
-            flex-1 min-w-0 resize-none bg-transparent
-            text-[15px] leading-6
-            text-zinc-900 dark:text-zinc-100
-            px-1.5 py-2.5
-            outline-none
-            max-h-[140px]
-            placeholder:text-zinc-400 dark:placeholder:text-zinc-500
-          "
-        />
-
-        <button
-          type="button"
-          onClick={toggleListening}
-          className={
-            'h-10 w-10 flex items-center justify-center rounded-full transition self-end ' +
-            (isListening
-              ? 'text-red-500 bg-red-50 dark:bg-red-500/15'
-              : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800')
-          }
-          aria-label="Voice"
-        >
-          <Mic size={20} />
-        </button>
-
-        <button
-          type="button"
-          onClick={sendMessage}
-          disabled={!canSend}
-          className={
-            'h-10 w-10 flex items-center justify-center rounded-full transition self-end shrink-0 ' +
-            (canSend
-              ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:opacity-90'
-              : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed')
-          }
-          aria-label="Send"
-        >
-          <Send size={18} />
-        </button>
       </div>
 
       {!isEmpty && (
@@ -787,7 +798,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
             </div>
           </div>
 
-          <div className="shrink-0 bg-zinc-50/95 dark:bg-[#0c0c0f]/95 backdrop-blur-md border-t border-zinc-200/70 dark:border-zinc-800 px-3 sm:px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <div className="shrink-0 px-3 sm:px-4 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-zinc-50 via-zinc-50/95 to-transparent dark:from-[#0c0c0f] dark:via-[#0c0c0f]/95 dark:to-transparent">
             {composer}
           </div>
         </>
