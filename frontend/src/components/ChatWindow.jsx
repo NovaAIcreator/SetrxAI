@@ -65,7 +65,11 @@ function ModePill({ mode, setMode }) {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    document.addEventListener('touchstart', h);
+    return () => {
+      document.removeEventListener('mousedown', h);
+      document.removeEventListener('touchstart', h);
+    };
   }, []);
 
   return (
@@ -81,7 +85,15 @@ function ModePill({ mode, setMode }) {
         <ChevronDown size={13} className={'opacity-60 transition ' + (open ? 'rotate-180' : '')} />
       </button>
       {open && (
-        <div className="absolute bottom-11 left-0 z-50 w-48 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl p-1.5 overflow-hidden">
+        <div
+          className="
+            absolute left-0 bottom-full mb-2 z-[100]
+            w-52 rounded-2xl
+            border border-zinc-200 dark:border-zinc-600
+            bg-white dark:bg-zinc-900
+            shadow-2xl p-1.5
+          "
+        >
           {MODES.map((m) => (
             <button
               key={m.id}
@@ -196,7 +208,11 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target)) setShowPlusMenu(false);
     };
     document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    document.addEventListener('touchstart', h);
+    return () => {
+      document.removeEventListener('mousedown', h);
+      document.removeEventListener('touchstart', h);
+    };
   }, []);
 
   useEffect(() => {
@@ -508,7 +524,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     (input.trim().length > 0 || imagePreviews.length > 0 || !!attachedFile);
 
   const composer = (
-    <div className="w-full max-w-2xl mx-auto">
+    <div className="w-full max-w-2xl mx-auto relative z-20">
       {imagePreviews.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-3 px-1">
           {imagePreviews.map((p, idx) => (
@@ -543,16 +559,18 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
       )}
       {fileError && <p className="text-xs text-red-500 mb-2 px-1">{fileError}</p>}
 
+      {/* overflow-visible so mode menu is not cut */}
       <div
         className="
+          relative z-30
           rounded-[28px]
           border border-zinc-200 dark:border-zinc-700/70
           bg-white dark:bg-[#18181b]
           shadow-[0_8px_30px_rgba(0,0,0,0.08)]
           dark:shadow-[0_12px_40px_rgba(0,0,0,0.45)]
-          overflow-hidden
         "
       >
+        {/* LAYER 1: message */}
         <div className="px-4 pt-3 pb-2">
           <textarea
             ref={textareaRef}
@@ -577,7 +595,8 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
           />
         </div>
 
-        <div className="flex items-center gap-1 px-2 pb-2 pt-1 border-t border-zinc-100 dark:border-white/[0.06]">
+        {/* LAYER 2: icons */}
+        <div className="flex items-center gap-1 px-2 pb-2 pt-1 border-t border-zinc-100 dark:border-white/[0.06] relative z-40">
           <input
             type="file"
             accept="image/*"
@@ -594,7 +613,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
             className="hidden"
           />
 
-          <div className="relative" ref={plusMenuRef}>
+          <div className="relative z-50" ref={plusMenuRef}>
             <button
               type="button"
               onClick={() => setShowPlusMenu((o) => !o)}
@@ -607,7 +626,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
               />
             </button>
             {showPlusMenu && (
-              <div className="absolute bottom-12 left-0 z-50 min-w-[190px] rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl p-1.5">
+              <div className="absolute bottom-full mb-2 left-0 z-[100] min-w-[190px] rounded-2xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-900 shadow-2xl p-1.5">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current && fileInputRef.current.click()}
@@ -787,7 +806,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
             </div>
           </div>
 
-          <div className="shrink-0 px-3 sm:px-4 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-zinc-50 via-zinc-50/95 to-transparent dark:from-[#0c0c0f] dark:via-[#0c0c0f]/95 dark:to-transparent">
+          <div className="shrink-0 relative z-30 px-3 sm:px-4 pt-2 pb-[max(1.25rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-zinc-50 via-zinc-50/95 to-transparent dark:from-[#0c0c0f] dark:via-[#0c0c0f]/95 dark:to-transparent">
             {composer}
           </div>
         </>
