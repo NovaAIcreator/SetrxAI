@@ -8,7 +8,7 @@ async function callGroq(apiKey, messages, onChunk, _imageData, options = {}) {
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
     stream: true,
     temperature: options.temperature ?? 0.28,
-    max_tokens: options.max_tokens ?? 900,
+    max_tokens: options.max_tokens ?? 2200,
   });
 
   let fullText = '';
