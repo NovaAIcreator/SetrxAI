@@ -106,9 +106,10 @@ router.get('/sessions/:id/messages', authMiddleware, async (req, res) => {
 });
 
 router.delete('/sessions/:id', authMiddleware, async (req, res) => {
-  await pool.query('    'DELETE FROM sessions WHERE id = $1 AND user_id = $2',
-    [req.params.id, req.userId]
-  );
+  await pool.query('DELETE FROM sessions WHERE id = $1 AND user_id = $2', [
+    req.params.id,
+    req.userId,
+  ]);
   res.json({ success: true });
 });
 
