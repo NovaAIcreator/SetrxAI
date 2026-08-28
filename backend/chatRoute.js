@@ -50,11 +50,12 @@ function wantsLongForm(text) {
 function maxTokensFor(mode, userText) {
   const t = String(userText || '');
   const long = wantsLongForm(t);
-  if (mode === 'coding' && long) return 4000;
-  if (mode === 'coding') return 2500;
-  if (mode === 'study' && long) return 2500;
-  if (t.length < 180) return 450;
-  return 900;
+  if (mode === 'coding' && long) return 4500;
+  if (mode === 'coding') return 3000;
+  if (mode === 'study' && long) return 3000;
+  if (mode === 'study') return 1800;
+  if (t.length < 180) return 1400;
+  return 2200;
 }
 
 function trimHistoryForBudget(messages, maxTokens) {
