@@ -1,16 +1,14 @@
-// groq.js
-// Groq API — behtar model (openai/gpt-oss-120b) ke saath
-
 const Groq = require('groq-sdk');
 
-async function callGroq(apiKey, messages, onChunk) {
+async function callGroq(apiKey, messages, onChunk, _imageData, options = {}) {
   const groq = new Groq({ apiKey });
 
   const stream = await groq.chat.completions.create({
-    model: 'openai/gpt-oss-120b', // 120B parameter model, behtar reasoning ke liye
-    messages: messages.map(m => ({ role: m.role, content: m.content })),
+    model: 'openai/gpt-oss-120b',
+    messages: messages.map((m) => ({ role: m.role, content: m.content })),
     stream: true,
-    temperature: 0.7,
+    temperature: options.temperature ?? 0.28,
+    max_tokens: options.max_tokens ?? 900,
   });
 
   let fullText = '';
