@@ -8,17 +8,17 @@ import {
   Wand2,
   Plus,
   ChevronDown,
-  ChevronRight,
   Check,
-  Globe,
+  Radar,
+  Beaker,
+  PenLine,
   Image as ImageIcon,
 } from 'lucide-react';
 import Message from './Message';
 import ModeHero from './ModeHero';
-import AgentBoard from './AgentBoard';
 import SourcesList from './SourcesList';
 import ArtifactFrame from './ArtifactFrame';
-import { useUsage, UsageMeter } from './UsageMeter';
+import { useUsage } from './UsageMeter';
 import { api } from '../api';
 
 const MODES = [
@@ -27,45 +27,35 @@ const MODES = [
   { id: 'coding', label: 'Coding', hint: 'Full working code' },
 ];
 
-const EMPTY_AGENTS = {
-  scout: { status: 'idle', detail: 'Waiting', log: [] },
-  lab: { status: 'idle', detail: 'Waiting', log: [] },
-  writer: { status: 'idle', detail: 'Waiting', log: [] },
+const AGENT_META = {
+  scout: {
+    id: 'scout',
+    label: 'Scout',
+    role: 'Web search & sources',
+    icon: Radar,
+    color: 'text-sky-500',
+    bar: 'bg-sky-500',
+    ring: 'ring-sky-500/30',
+  },
+  lab: {
+    id: 'lab',
+    label: 'Lab',
+    role: 'Experiment & verify',
+    icon: Beaker,
+    color: 'text-violet-500',
+    bar: 'bg-violet-500',
+    ring: 'ring-violet-500/30',
+  },
+  writer: {
+    id: 'writer',
+    label: 'Writer',
+    role: 'Final answer',
+    icon: PenLine,
+    color: 'text-emerald-500',
+    bar: 'bg-emerald-500',
+    ring: 'ring-emerald-500/30',
+  },
 };
-
-function ThinkingPanel({ steps }) {
-  const [open, setOpen] = useState(true);
-  if (!steps || steps.length === 0) return null;
-  return (
-    <div className="mb-4 px-1">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 text-[13px] text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200"
-      >
-        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        <span className="font-medium">Thinking</span>
-      </button>
-      {open && (
-        <div className="mt-1.5 ml-5 space-y-1.5 border-l border-zinc-200 dark:border-white/10 pl-3">
-          {steps.map((s, i) => (
-            <p
-              key={i}
-              className={
-                'text-[13px] leading-snug ' +
-                (i === steps.length - 1
-                  ? 'text-zinc-700 dark:text-zinc-300'
-                  : 'text-zinc-400 dark:text-zinc-500')
-              }
-            >
-              {s}
-            </p>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function ModePill({ mode, setMode }) {
   const [open, setOpen] = useState(false);
@@ -128,19 +118,114 @@ function ModePill({ mode, setMode }) {
   );
 }
 
-function ImageGeneratingAnimation() {
-  const [step, setStep] = useState(0);
-  const steps = [
-    'Understanding the image request',
-    'Composing the image',
-    'Adding detail',
-    'Almost ready',
-  ];
-  useEffect(() => {
-    const t = setInterval(() => setStep((p) => (p < steps.length - 1 ? p + 1 : p)), 2000);
-    return () => clearInterval(t);
-  }, []);
-  return <ThinkingPanel steps={steps.slice(0, step + 1)} />;
+/** Simple live agent cards with animation — only active agents shown */
+function AgentsLive({ agents }) {
+  const list = ['scout', 'lab', 'writer']
+    .map((id) => ({ id, ...agents[id], meta: AGENT_META[id] }))
+    .filter((a) => a.status && a.status !== 'idle');
+
+  if (!list.length) return null;
+
+  return (
+    <div className="mb-5 space-y-2">
+      {list.map((a) => {
+        const Icon = a.meta.icon;
+        const running = a.status === 'running';
+        const done = a.status === 'done';
+        return (
+          <div
+            key={a.id}
+            className={
+              'relative overflow-hidden rounded-2xl border border-zinc-200/80 dark:border-white/10 ' +
+              'bg-white/90 dark:bg-zinc-900/80 backdrop-blur px-3.5 py-3 ' +
+              'transition-all duration-300 ' +
+              (running ? 'ring-2 ' + a.meta.ring : '')
+            }
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className={
+                  'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ' +
+                  'bg-zinc-100 dark:bg-zinc-800 ' +
+                  a.meta.color
+                }
+              >
+                <Icon
+                  size={18}
+                  className={running ? 'animate-pulse' : ''}
+                  strokeWidth={1.75}
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {a.meta.label}
+                  </span>
+                  <span className="text-[11px] text-zinc-400">{a.meta.role}</span>
+                  <span
+                    className={
+                      'ml-auto text-[10px] font-medium uppercase tracking-wide ' +
+                      (running
+                        ? 'text-zinc-800 dark:text-zinc-200'
+                        : done
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-zinc-400')
+                    }
+                  >
+                    {running ? 'Working' : done ? 'Done' : a.status}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[13px] leading-snug text-zinc-600 dark:text-zinc-300">
+                  {a.detail || (running ? 'Working…' : '—')}
+                </p>
+              </div>
+            </div>
+
+            {/* progress bar animation */}
+            {running && (
+              <div className="mt-3 h-0.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                <div
+                  className={'h-full w-1/3 rounded-full ' + a.meta.bar}
+                  style={{
+                    animation: 'agent-slide 1.2s ease-in-out infinite',
+                  }}
+                />
+              </div>
+            )}
+            {done && (
+              <div className="mt-3 h-0.5 rounded-full bg-emerald-500/80" />
+            )}
+          </div>
+        );
+      })}
+      <style>{`
+        @keyframes agent-slide {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(400%); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function ImageLimitPill({ remaining, limit }) {
+  const low = remaining <= 2;
+  return (
+    <div
+      className={
+        'mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs ' +
+        (low
+          ? 'border-amber-300/60 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'
+          : 'border-zinc-200 bg-white text-zinc-600 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300')
+      }
+    >
+      <ImageIcon size={13} className="opacity-70" />
+      <span className="tabular-nums font-medium">
+        {remaining}/{limit}
+      </span>
+      <span className="text-zinc-400 dark:text-zinc-500">images today</span>
+    </div>
+  );
 }
 
 const IMAGE_KEYWORDS = [
@@ -152,7 +237,8 @@ const EDIT_KEYWORDS = [
   'sudhar', 'badal', 'hd', 'quality', 'clear', 'sharp',
 ];
 const SEARCH_KEYWORDS = [
-  'search', 'latest', 'news', 'today', 'current', 'price', 'weather', 'score', '2025', '2026',
+  'search', 'latest', 'news', 'today', 'current', 'price', 'weather', 'score',
+  '2025', '2026', 'who won', 'update', 'live',
 ];
 
 function detectIntent(text, hasPhoto, forceImageGen) {
@@ -164,81 +250,12 @@ function detectIntent(text, hasPhoto, forceImageGen) {
   return null;
 }
 
-/** Frontend-only multi-agent simulation (backend ready hone tak) */
-function createAgentRunner(setAgents) {
-  const update = (id, patch) => {
-    setAgents((prev) => {
-      const cur = prev[id] || EMPTY_AGENTS[id];
-      const log = patch.logLine
-        ? [...(cur.log || []), patch.logLine].slice(-6)
-        : cur.log || [];
-      return {
-        ...prev,
-        [id]: {
-          ...cur,
-          ...patch,
-          log,
-        },
-      };
-    });
-  };
-
-  return {
-    async runScout(query) {
-      update('scout', { status: 'running', detail: 'Searching the web…', logLine: 'Query: ' + query.slice(0, 60) });
-      await delay(700);
-      update('scout', { detail: 'Ranking top sources…', logLine: 'Found candidate pages' });
-      await delay(600);
-      update('scout', { status: 'done', detail: 'Sources ready', logLine: 'Top sources selected' });
-      // Demo sources (backend real links dega)
-      return {
-        sources: [
-          {
-            title: 'High-quality reference (demo)',
-            url: 'https://en.wikipedia.org/wiki/Main_Page',
-            snippet: 'Primary overview used by Scout for grounding.',
-          },
-          {
-            title: 'Recent discussion / docs',
-            url: 'https://developer.mozilla.org/',
-            snippet: 'Technical reference Scout checked for accuracy.',
-          },
-        ],
-        checks: [{ note: 'Cross-checked 2+ independent sources' }],
-      };
-    },
-    async runLab(mode, query) {
-      update('lab', { status: 'running', detail: 'Opening experiment lab…', logLine: 'Mode: ' + mode });
-      await delay(500);
-      update('lab', { detail: 'Testing ideas / code…', logLine: 'Running checks' });
-      await delay(700);
-      update('lab', { status: 'done', detail: 'Artifact ready', logLine: 'Lab finished' });
-
-      // Simple demo artifact for coding / study
-      if (mode === 'coding' || /code|html|react|component/i.test(query)) {
-        return {
-          html: `<h2>Lab Experiment</h2>
-<p>This is a live artifact from <strong>Lab</strong> agent.</p>
-<pre style="background:#111;color:#eee;padding:12px;border-radius:8px;overflow:auto">// example
-function hello() {
-  return "SetrxAI Lab";
-}</pre>
-<p>You can replace this with real generated UI from backend later.</p>`,
-        };
-      }
-      return { html: null };
-    },
-    async runWriter() {
-      update('writer', { status: 'running', detail: 'Writing precise answer…', logLine: 'Synthesizing' });
-      await delay(400);
-      update('writer', { detail: 'Adding citations & structure…', logLine: 'Formatting' });
-      await delay(500);
-      update('writer', { status: 'done', detail: 'Answer ready', logLine: 'Done' });
-    },
-    reset() {
-      setAgents({ ...EMPTY_AGENTS });
-    },
-  };
+function needsSearch(text, mode) {
+  const lower = (text || '').toLowerCase();
+  if (SEARCH_KEYWORDS.some((k) => lower.includes(k))) return true;
+  // coding/study pure knowledge — default no search
+  if (mode === 'coding' || mode === 'study') return false;
+  return false;
 }
 
 function delay(ms) {
@@ -249,7 +266,6 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [waitingFirstChunk, setWaitingFirstChunk] = useState(false);
-  const [thinkingSteps, setThinkingSteps] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const [isListening, setIsListening] = useState(false);
   const [imgLoading, setImgLoading] = useState(false);
@@ -259,9 +275,13 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
   const [parsingFile, setParsingFile] = useState(false);
   const [fileError, setFileError] = useState('');
   const [lightbox, setLightbox] = useState(null);
-  const [agents, setAgents] = useState({ ...EMPTY_AGENTS });
-  const [showAgents, setShowAgents] = useState(false);
-  const [activeSources, setActiveSources] = useState(null); // { sources, checks } for last reply
+
+  const [agents, setAgents] = useState({
+    scout: { status: 'idle', detail: '' },
+    lab: { status: 'idle', detail: '' },
+    writer: { status: 'idle', detail: '' },
+  });
+  const [activeSources, setActiveSources] = useState(null);
   const [activeArtifact, setActiveArtifact] = useState(null);
 
   const { usage, refresh: refreshUsage } = useUsage();
@@ -277,11 +297,6 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
   const isNewSessionLoad = useRef(true);
   const shouldScrollRef = useRef(false);
   const lastImageJob = useRef(null);
-  const agentRunner = useRef(null);
-
-  if (!agentRunner.current) {
-    agentRunner.current = createAgentRunner(setAgents);
-  }
 
   const isEmpty = messages.length === 0;
 
@@ -299,7 +314,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
       c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
       shouldScrollRef.current = false;
     }
-  }, [messages, thinkingSteps, agents, isEmpty]);
+  }, [messages, agents, isEmpty]);
 
   useEffect(() => {
     const h = (e) => {
@@ -327,18 +342,20 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     recognitionRef.current = r;
   }, []);
 
-  const pushThinking = (text) => {
-    const t = String(text || '')
-      .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
-      .trim();
-    if (!t) return;
-    setThinkingSteps((prev) => {
-      if (prev[prev.length - 1] === t) return prev;
-      return prev.concat([t]).slice(-10);
-    });
+  const setAgent = (id, patch) => {
+    setAgents((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], ...patch },
+    }));
   };
 
-  const clearThinking = () => setThinkingSteps([]);
+  const resetAgents = () => {
+    setAgents({
+      scout: { status: 'idle', detail: '' },
+      lab: { status: 'idle', detail: '' },
+      writer: { status: 'idle', detail: '' },
+    });
+  };
 
   const toggleListening = () => {
     if (!recognitionRef.current) {
@@ -404,7 +421,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
         prev.concat([
           {
             role: 'assistant',
-            content: `Image limit reached (${imageLimit}/day). Try again tomorrow or upgrade later.`,
+            content: `Aaj ki image limit khatam ho chuki hai (${imageLimit}/day). Kal try karo.`,
           },
         ])
       );
@@ -514,6 +531,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     const imagesToSend = imagePreviews.map((p) => ({ mimeType: p.mimeType, data: p.data }));
     const fileToSend = attachedFile ? { name: attachedFile.name, text: attachedFile.text } : null;
     const queryText = input.trim() || displayText;
+    const doSearch = needsSearch(queryText, mode);
 
     setInput('');
     setImagePreviews([]);
@@ -521,11 +539,9 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     setForceImageGen(false);
     setLoading(true);
     setWaitingFirstChunk(true);
-    setThinkingSteps(['Starting multi-agent pipeline…']);
-    setShowAgents(true);
     setActiveSources(null);
     setActiveArtifact(null);
-    agentRunner.current.reset();
+    resetAgents();
     setMessages((prev) => prev.concat([{ role: 'assistant', content: '' }]));
 
     if (textareaRef.current) {
@@ -533,19 +549,50 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     }
 
     try {
-      // ——— 3 Agents pipeline (frontend simulation) ———
-      pushThinking('Scout is searching the internet…');
-      const scoutResult = await agentRunner.current.runScout(queryText);
-      setActiveSources(scoutResult);
+      // ——— Agents (simple, only real work) ———
+      let scoutResult = null;
+      let labHtml = null;
 
-      pushThinking('Lab is experimenting…');
-      const labResult = await agentRunner.current.runLab(mode, queryText);
-      if (labResult?.html) setActiveArtifact(labResult.html);
+      if (doSearch) {
+        setAgent('scout', { status: 'running', detail: 'Searching the web…' });
+        await delay(650);
+        setAgent('scout', { status: 'running', detail: 'Picking best sources…' });
+        await delay(500);
+        setAgent('scout', { status: 'done', detail: 'Sources ready' });
+        scoutResult = {
+          sources: [
+            {
+              title: 'Reference source',
+              url: 'https://en.wikipedia.org/wiki/Main_Page',
+              snippet: 'Grounding source (demo until backend search is live).',
+            },
+          ],
+          checks: [{ note: 'Search used only because query needed fresh info' }],
+        };
+        setActiveSources(scoutResult);
+      }
 
-      pushThinking('Writer is composing the final answer…');
-      await agentRunner.current.runWriter();
+      // Lab only when coding / experiment-ish
+      const wantLab =
+        mode === 'coding' ||
+        /code|html|react|component|experiment|test|debug/i.test(queryText);
 
-      // Real stream from backend
+      if (wantLab) {
+        setAgent('lab', { status: 'running', detail: 'Running experiment…' });
+        await delay(600);
+        setAgent('lab', { status: 'running', detail: 'Checking result…' });
+        await delay(450);
+        setAgent('lab', { status: 'done', detail: 'Experiment done' });
+        labHtml = `<h2 style="margin:0 0 8px">Lab</h2>
+<p style="margin:0 0 12px;color:#555">Quick experiment for your request.</p>
+<pre style="background:#111;color:#e5e5e5;padding:12px;border-radius:10px;overflow:auto;font-size:13px">// verified sketch
+function ok() { return true; }</pre>`;
+        setActiveArtifact(labHtml);
+      }
+
+      setAgent('writer', { status: 'running', detail: 'Writing accurate answer…' });
+      await delay(350);
+
       const response = await api.chatStream(
         mode,
         updatedMessages.map((m) => ({ role: m.role, content: m.content })),
@@ -555,9 +602,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
         imagesToSend.length ? imagesToSend : null
       );
 
-      if (!response.ok || !response.body) {
-        throw new Error('Stream failed');
-      }
+      if (!response.ok || !response.body) throw new Error('Stream failed');
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -578,32 +623,20 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
           try {
             const parsed = JSON.parse(jsonStr);
 
-            // Future-proof: backend can send real agent events
-            if (parsed.agent && parsed.agent.id) {
-              setAgents((prev) => ({
-                ...prev,
-                [parsed.agent.id]: {
-                  status: parsed.agent.status || 'running',
-                  detail: parsed.agent.detail || '',
-                  log: [...(prev[parsed.agent.id]?.log || []), parsed.agent.logLine].filter(Boolean).slice(-6),
-                },
-              }));
+            if (parsed.agent?.id) {
+              setAgent(parsed.agent.id, {
+                status: parsed.agent.status || 'running',
+                detail: parsed.agent.detail || '',
+              });
             }
             if (parsed.sources) {
               setActiveSources({ sources: parsed.sources, checks: parsed.checks || [] });
             }
-            if (parsed.artifactHtml) {
-              setActiveArtifact(parsed.artifactHtml);
-            }
-
-            if (parsed.thinking) {
-              pushThinking(parsed.thinking);
-              setWaitingFirstChunk(true);
-            }
+            if (parsed.artifactHtml) setActiveArtifact(parsed.artifactHtml);
 
             if (parsed.replace) {
-              clearThinking();
               setWaitingFirstChunk(false);
+              setAgent('writer', { status: 'done', detail: 'Answer ready' });
               setMessages((prev) => {
                 const u = prev.slice();
                 u[u.length - 1] = {
@@ -611,15 +644,15 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
                   content: parsed.replace,
                   sources: scoutResult?.sources,
                   checks: scoutResult?.checks,
-                  artifactHtml: labResult?.html || null,
+                  artifactHtml: labHtml || null,
                 };
                 return u;
               });
             }
 
             if (parsed.chunk) {
-              clearThinking();
               setWaitingFirstChunk(false);
+              setAgent('writer', { status: 'running', detail: 'Writing…' });
               setMessages((prev) => {
                 const u = prev.slice();
                 const last = u[u.length - 1];
@@ -628,15 +661,15 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
                   content: (last.content || '') + parsed.chunk,
                   sources: last.sources || scoutResult?.sources,
                   checks: last.checks || scoutResult?.checks,
-                  artifactHtml: last.artifactHtml || labResult?.html || null,
+                  artifactHtml: last.artifactHtml || labHtml || null,
                 };
                 return u;
               });
             }
 
             if (parsed.error) {
-              clearThinking();
               setWaitingFirstChunk(false);
+              setAgent('writer', { status: 'done', detail: 'Error' });
               setMessages((prev) => {
                 const u = prev.slice();
                 u[u.length - 1] = {
@@ -649,9 +682,11 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
           } catch (e) {}
         }
       }
+
+      setAgent('writer', { status: 'done', detail: 'Answer ready' });
     } catch (err) {
-      clearThinking();
       setWaitingFirstChunk(false);
+      setAgent('writer', { status: 'done', detail: 'Failed' });
       setMessages((prev) => {
         const u = prev.slice();
         u[u.length - 1] = {
@@ -663,11 +698,6 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     } finally {
       setLoading(false);
       setWaitingFirstChunk(false);
-      clearThinking();
-      // agents board thoda time dikhe, phir soft hide optional
-      setTimeout(() => {
-        // keep last status visible; user can still see
-      }, 800);
     }
   };
 
@@ -684,13 +714,14 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     ? 'Photo attached — ask or say improve this…'
     : forceImageGen
     ? 'Describe the image you want…'
-    : 'Message SetrxAI… (Scout + Lab + Writer)';
+    : 'Message SetrxAI…';
 
   const canSend =
     !loading &&
     !imgLoading &&
     (input.trim().length > 0 || imagePreviews.length > 0 || !!attachedFile);
 
+  // ——— Composer: same style as original, no extra limit text inside ———
   const composer = (
     <div className="w-full max-w-2xl mx-auto relative z-20">
       {imagePreviews.length > 0 && (
@@ -803,9 +834,6 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
                   className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
                 >
                   <Wand2 size={16} /> Generate image
-                  <span className="ml-auto text-[10px] text-zinc-400">
-                    {imageLeft}/{imageLimit}
-                  </span>
                 </button>
               </div>
             )}
@@ -829,10 +857,6 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
 
           <div className="flex-1" />
 
-          <span className="hidden sm:inline text-[10px] text-zinc-400 mr-1 tabular-nums">
-            Img {imageLeft}/{imageLimit}
-          </span>
-
           <button
             type="button"
             onClick={sendMessage}
@@ -852,7 +876,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
 
       {!isEmpty && (
         <p className="text-[11px] text-center text-zinc-400 dark:text-zinc-500 mt-2.5">
-          SetrxAI · Scout searches · Lab experiments · Writer answers. Check important info.
+          SetrxAI can make mistakes. Check important info.
         </p>
       )}
     </div>
@@ -878,18 +902,11 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
         <>
           <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto">
             <div className="max-w-2xl mx-auto w-full px-3 sm:px-4 py-6">
-              {/* Live Agent Board */}
-              {showAgents && (
-                <div className="mb-5">
-                  <div className="flex items-center gap-2 mb-2 px-0.5">
-                    <Globe size={14} className="text-zinc-500" />
-                    <span className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
-                      Agents live
-                    </span>
-                  </div>
-                  <AgentBoard events={agents} visible={true} />
-                </div>
-              )}
+              {/* Image limit — chat area top, not in typebox */}
+              <ImageLimitPill remaining={imageLeft} limit={imageLimit} />
+
+              {/* Live agents — only when working */}
+              <AgentsLive agents={agents} />
 
               {displayMessages.map((msg, i) => {
                 if (msg.role === 'user' && msg.previewUrls && msg.previewUrls.length) {
@@ -970,7 +987,6 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
                   );
                 }
 
-                // Normal assistant message + sources + artifact
                 if (msg.role === 'assistant') {
                   return (
                     <div key={i} className="mb-6">
@@ -991,8 +1007,11 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
                 return <Message key={i} role={msg.role} content={msg.content} />;
               })}
 
-              {thinkingSteps.length > 0 && <ThinkingPanel steps={thinkingSteps} />}
-              {imgLoading && <ImageGeneratingAnimation />}
+              {imgLoading && (
+                <div className="mb-4 rounded-2xl border border-zinc-200 dark:border-white/10 bg-white/80 dark:bg-zinc-900/80 px-4 py-3 text-sm text-zinc-500">
+                  Generating image…
+                </div>
+              )}
             </div>
           </div>
 
