@@ -10,9 +10,15 @@ import {
   ChevronDown,
   ChevronRight,
   Check,
+  Globe,
+  Image as ImageIcon,
 } from 'lucide-react';
 import Message from './Message';
 import ModeHero from './ModeHero';
+import AgentBoard from './AgentBoard';
+import SourcesList from './SourcesList';
+import ArtifactFrame from './ArtifactFrame';
+import { useUsage, UsageMeter } from './UsageMeter';
 import { api } from '../api';
 
 const MODES = [
@@ -20,6 +26,12 @@ const MODES = [
   { id: 'study', label: 'Study', hint: 'Notes & concepts' },
   { id: 'coding', label: 'Coding', hint: 'Full working code' },
 ];
+
+const EMPTY_AGENTS = {
+  scout: { status: 'idle', detail: 'Waiting', log: [] },
+  lab: { status: 'idle', detail: 'Waiting', log: [] },
+  writer: { status: 'idle', detail: 'Waiting', log: [] },
+};
 
 function ThinkingPanel({ steps }) {
   const [open, setOpen] = useState(true);
@@ -85,15 +97,7 @@ function ModePill({ mode, setMode }) {
         <ChevronDown size={13} className={'opacity-60 transition ' + (open ? 'rotate-180' : '')} />
       </button>
       {open && (
-        <div
-          className="
-            absolute left-0 bottom-full mb-2 z-[100]
-            w-52 rounded-2xl
-            border border-zinc-200 dark:border-zinc-600
-            bg-white dark:bg-zinc-900
-            shadow-2xl p-1.5
-          "
-        >
+        <div className="absolute left-0 bottom-full mb-2 z-[100] w-52 rounded-2xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-900 shadow-2xl p-1.5">
           {MODES.map((m) => (
             <button
               key={m.id}
@@ -160,6 +164,87 @@ function detectIntent(text, hasPhoto, forceImageGen) {
   return null;
 }
 
+/** Frontend-only multi-agent simulation (backend ready hone tak) */
+function createAgentRunner(setAgents) {
+  const update = (id, patch) => {
+    setAgents((prev) => {
+      const cur = prev[id] || EMPTY_AGENTS[id];
+      const log = patch.logLine
+        ? [...(cur.log || []), patch.logLine].slice(-6)
+        : cur.log || [];
+      return {
+        ...prev,
+        [id]: {
+          ...cur,
+          ...patch,
+          log,
+        },
+      };
+    });
+  };
+
+  return {
+    async runScout(query) {
+      update('scout', { status: 'running', detail: 'Searching the web…', logLine: 'Query: ' + query.slice(0, 60) });
+      await delay(700);
+      update('scout', { detail: 'Ranking top sources…', logLine: 'Found candidate pages' });
+      await delay(600);
+      update('scout', { status: 'done', detail: 'Sources ready', logLine: 'Top sources selected' });
+      // Demo sources (backend real links dega)
+      return {
+        sources: [
+          {
+            title: 'High-quality reference (demo)',
+            url: 'https://en.wikipedia.org/wiki/Main_Page',
+            snippet: 'Primary overview used by Scout for grounding.',
+          },
+          {
+            title: 'Recent discussion / docs',
+            url: 'https://developer.mozilla.org/',
+            snippet: 'Technical reference Scout checked for accuracy.',
+          },
+        ],
+        checks: [{ note: 'Cross-checked 2+ independent sources' }],
+      };
+    },
+    async runLab(mode, query) {
+      update('lab', { status: 'running', detail: 'Opening experiment lab…', logLine: 'Mode: ' + mode });
+      await delay(500);
+      update('lab', { detail: 'Testing ideas / code…', logLine: 'Running checks' });
+      await delay(700);
+      update('lab', { status: 'done', detail: 'Artifact ready', logLine: 'Lab finished' });
+
+      // Simple demo artifact for coding / study
+      if (mode === 'coding' || /code|html|react|component/i.test(query)) {
+        return {
+          html: `<h2>Lab Experiment</h2>
+<p>This is a live artifact from <strong>Lab</strong> agent.</p>
+<pre style="background:#111;color:#eee;padding:12px;border-radius:8px;overflow:auto">// example
+function hello() {
+  return "SetrxAI Lab";
+}</pre>
+<p>You can replace this with real generated UI from backend later.</p>`,
+        };
+      }
+      return { html: null };
+    },
+    async runWriter() {
+      update('writer', { status: 'running', detail: 'Writing precise answer…', logLine: 'Synthesizing' });
+      await delay(400);
+      update('writer', { detail: 'Adding citations & structure…', logLine: 'Formatting' });
+      await delay(500);
+      update('writer', { status: 'done', detail: 'Answer ready', logLine: 'Done' });
+    },
+    reset() {
+      setAgents({ ...EMPTY_AGENTS });
+    },
+  };
+}
+
+function delay(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 export default function ChatWindow({ mode, setMode, sessionId, messages, setMessages, isGuest }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -174,6 +259,14 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
   const [parsingFile, setParsingFile] = useState(false);
   const [fileError, setFileError] = useState('');
   const [lightbox, setLightbox] = useState(null);
+  const [agents, setAgents] = useState({ ...EMPTY_AGENTS });
+  const [showAgents, setShowAgents] = useState(false);
+  const [activeSources, setActiveSources] = useState(null); // { sources, checks } for last reply
+  const [activeArtifact, setActiveArtifact] = useState(null);
+
+  const { usage, refresh: refreshUsage } = useUsage();
+  const imageLeft = usage?.image?.remaining ?? 8;
+  const imageLimit = usage?.image?.limit ?? 8;
 
   const scrollContainerRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -184,6 +277,11 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
   const isNewSessionLoad = useRef(true);
   const shouldScrollRef = useRef(false);
   const lastImageJob = useRef(null);
+  const agentRunner = useRef(null);
+
+  if (!agentRunner.current) {
+    agentRunner.current = createAgentRunner(setAgents);
+  }
 
   const isEmpty = messages.length === 0;
 
@@ -201,7 +299,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
       c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
       shouldScrollRef.current = false;
     }
-  }, [messages, thinkingSteps, isEmpty]);
+  }, [messages, thinkingSteps, agents, isEmpty]);
 
   useEffect(() => {
     const h = (e) => {
@@ -301,6 +399,18 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
   };
 
   const generateImage = async (promptText, photo) => {
+    if (imageLeft <= 0 && !photo) {
+      setMessages((prev) =>
+        prev.concat([
+          {
+            role: 'assistant',
+            content: `Image limit reached (${imageLimit}/day). Try again tomorrow or upgrade later.`,
+          },
+        ])
+      );
+      return;
+    }
+
     const prompt = (promptText || '').trim();
     if ((!prompt && !photo) || imgLoading) return;
     setImgLoading(true);
@@ -341,6 +451,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
           },
         ])
       );
+      refreshUsage();
     } catch (err) {
       setMessages((prev) =>
         prev.concat([{ role: 'assistant', content: 'Image failed: ' + err.message }])
@@ -402,6 +513,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
 
     const imagesToSend = imagePreviews.map((p) => ({ mimeType: p.mimeType, data: p.data }));
     const fileToSend = attachedFile ? { name: attachedFile.name, text: attachedFile.text } : null;
+    const queryText = input.trim() || displayText;
 
     setInput('');
     setImagePreviews([]);
@@ -409,7 +521,11 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     setForceImageGen(false);
     setLoading(true);
     setWaitingFirstChunk(true);
-    setThinkingSteps(['Reading your message']);
+    setThinkingSteps(['Starting multi-agent pipeline…']);
+    setShowAgents(true);
+    setActiveSources(null);
+    setActiveArtifact(null);
+    agentRunner.current.reset();
     setMessages((prev) => prev.concat([{ role: 'assistant', content: '' }]));
 
     if (textareaRef.current) {
@@ -417,6 +533,19 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     }
 
     try {
+      // ——— 3 Agents pipeline (frontend simulation) ———
+      pushThinking('Scout is searching the internet…');
+      const scoutResult = await agentRunner.current.runScout(queryText);
+      setActiveSources(scoutResult);
+
+      pushThinking('Lab is experimenting…');
+      const labResult = await agentRunner.current.runLab(mode, queryText);
+      if (labResult?.html) setActiveArtifact(labResult.html);
+
+      pushThinking('Writer is composing the final answer…');
+      await agentRunner.current.runWriter();
+
+      // Real stream from backend
       const response = await api.chatStream(
         mode,
         updatedMessages.map((m) => ({ role: m.role, content: m.content })),
@@ -425,6 +554,11 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
         fileToSend,
         imagesToSend.length ? imagesToSend : null
       );
+
+      if (!response.ok || !response.body) {
+        throw new Error('Stream failed');
+      }
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -444,6 +578,24 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
           try {
             const parsed = JSON.parse(jsonStr);
 
+            // Future-proof: backend can send real agent events
+            if (parsed.agent && parsed.agent.id) {
+              setAgents((prev) => ({
+                ...prev,
+                [parsed.agent.id]: {
+                  status: parsed.agent.status || 'running',
+                  detail: parsed.agent.detail || '',
+                  log: [...(prev[parsed.agent.id]?.log || []), parsed.agent.logLine].filter(Boolean).slice(-6),
+                },
+              }));
+            }
+            if (parsed.sources) {
+              setActiveSources({ sources: parsed.sources, checks: parsed.checks || [] });
+            }
+            if (parsed.artifactHtml) {
+              setActiveArtifact(parsed.artifactHtml);
+            }
+
             if (parsed.thinking) {
               pushThinking(parsed.thinking);
               setWaitingFirstChunk(true);
@@ -454,7 +606,13 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
               setWaitingFirstChunk(false);
               setMessages((prev) => {
                 const u = prev.slice();
-                u[u.length - 1] = { role: 'assistant', content: parsed.replace };
+                u[u.length - 1] = {
+                  role: 'assistant',
+                  content: parsed.replace,
+                  sources: scoutResult?.sources,
+                  checks: scoutResult?.checks,
+                  artifactHtml: labResult?.html || null,
+                };
                 return u;
               });
             }
@@ -465,7 +623,13 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
               setMessages((prev) => {
                 const u = prev.slice();
                 const last = u[u.length - 1];
-                u[u.length - 1] = { role: last.role, content: last.content + parsed.chunk };
+                u[u.length - 1] = {
+                  role: last.role,
+                  content: (last.content || '') + parsed.chunk,
+                  sources: last.sources || scoutResult?.sources,
+                  checks: last.checks || scoutResult?.checks,
+                  artifactHtml: last.artifactHtml || labResult?.html || null,
+                };
                 return u;
               });
             }
@@ -500,6 +664,10 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
       setLoading(false);
       setWaitingFirstChunk(false);
       clearThinking();
+      // agents board thoda time dikhe, phir soft hide optional
+      setTimeout(() => {
+        // keep last status visible; user can still see
+      }, 800);
     }
   };
 
@@ -516,7 +684,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     ? 'Photo attached — ask or say improve this…'
     : forceImageGen
     ? 'Describe the image you want…'
-    : 'Message SetrxAI…';
+    : 'Message SetrxAI… (Scout + Lab + Writer)';
 
   const canSend =
     !loading &&
@@ -559,18 +727,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
       )}
       {fileError && <p className="text-xs text-red-500 mb-2 px-1">{fileError}</p>}
 
-      {/* overflow-visible so mode menu is not cut */}
-      <div
-        className="
-          relative z-30
-          rounded-[28px]
-          border border-zinc-200 dark:border-zinc-700/70
-          bg-white dark:bg-[#18181b]
-          shadow-[0_8px_30px_rgba(0,0,0,0.08)]
-          dark:shadow-[0_12px_40px_rgba(0,0,0,0.45)]
-        "
-      >
-        {/* LAYER 1: message */}
+      <div className="relative z-30 rounded-[28px] border border-zinc-200 dark:border-zinc-700/70 bg-white dark:bg-[#18181b] shadow-[0_8px_30px_rgba(0,0,0,0.08)] dark:shadow-[0_12px_40px_rgba(0,0,0,0.45)]">
         <div className="px-4 pt-3 pb-2">
           <textarea
             ref={textareaRef}
@@ -584,18 +741,10 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             rows={1}
-            className="
-              w-full resize-none bg-transparent
-              text-[15px] leading-6
-              text-zinc-900 dark:text-zinc-100
-              outline-none
-              max-h-[160px]
-              placeholder:text-zinc-400 dark:placeholder:text-zinc-500
-            "
+            className="w-full resize-none bg-transparent text-[15px] leading-6 text-zinc-900 dark:text-zinc-100 outline-none max-h-[160px] placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
           />
         </div>
 
-        {/* LAYER 2: icons */}
         <div className="flex items-center gap-1 px-2 pb-2 pt-1 border-t border-zinc-100 dark:border-white/[0.06] relative z-40">
           <input
             type="file"
@@ -613,31 +762,34 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
             className="hidden"
           />
 
-          <div className="relative z-50" ref={plusMenuRef}>
+          <div className="relative" ref={plusMenuRef}>
             <button
               type="button"
-              onClick={() => setShowPlusMenu((o) => !o)}
-              className="h-10 w-10 flex items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+              onClick={() => setShowPlusMenu((v) => !v)}
+              className="h-9 w-9 rounded-full flex items-center justify-center text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
               aria-label="Attach"
             >
-              <Plus
-                size={22}
-                className={showPlusMenu ? 'rotate-45 transition-transform' : 'transition-transform'}
-              />
+              <Plus size={20} />
             </button>
             {showPlusMenu && (
-              <div className="absolute bottom-full mb-2 left-0 z-[100] min-w-[190px] rounded-2xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-900 shadow-2xl p-1.5">
+              <div className="absolute left-0 bottom-full mb-2 w-48 rounded-2xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-900 shadow-xl p-1.5 z-50">
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                    setShowPlusMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
                 >
-                  <Paperclip size={16} /> Photos (max 4)
+                  <ImageIcon size={16} /> Photo
                 </button>
                 <button
                   type="button"
-                  onClick={() => docInputRef.current && docInputRef.current.click()}
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  onClick={() => {
+                    docInputRef.current?.click();
+                    setShowPlusMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
                 >
                   <FileText size={16} /> File
                 </button>
@@ -646,33 +798,40 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
                   onClick={() => {
                     setForceImageGen(true);
                     setShowPlusMenu(false);
-                    setTimeout(() => textareaRef.current && textareaRef.current.focus(), 50);
+                    textareaRef.current?.focus();
                   }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                  className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
                 >
                   <Wand2 size={16} /> Generate image
+                  <span className="ml-auto text-[10px] text-zinc-400">
+                    {imageLeft}/{imageLimit}
+                  </span>
                 </button>
               </div>
             )}
           </div>
 
-          <ModePill mode={mode || 'general'} setMode={setMode} />
-
-          <div className="flex-1" />
+          <ModePill mode={mode} setMode={setMode} />
 
           <button
             type="button"
             onClick={toggleListening}
             className={
-              'h-10 w-10 flex items-center justify-center rounded-full transition ' +
+              'h-9 w-9 rounded-full flex items-center justify-center transition ' +
               (isListening
-                ? 'text-red-500 bg-red-50 dark:bg-red-500/15'
+                ? 'bg-red-500/15 text-red-500'
                 : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800')
             }
             aria-label="Voice"
           >
-            <Mic size={20} />
+            <Mic size={18} />
           </button>
+
+          <div className="flex-1" />
+
+          <span className="hidden sm:inline text-[10px] text-zinc-400 mr-1 tabular-nums">
+            Img {imageLeft}/{imageLimit}
+          </span>
 
           <button
             type="button"
@@ -693,7 +852,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
 
       {!isEmpty && (
         <p className="text-[11px] text-center text-zinc-400 dark:text-zinc-500 mt-2.5">
-          SetrxAI can make mistakes. Check important info.
+          SetrxAI · Scout searches · Lab experiments · Writer answers. Check important info.
         </p>
       )}
     </div>
@@ -719,6 +878,19 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
         <>
           <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto">
             <div className="max-w-2xl mx-auto w-full px-3 sm:px-4 py-6">
+              {/* Live Agent Board */}
+              {showAgents && (
+                <div className="mb-5">
+                  <div className="flex items-center gap-2 mb-2 px-0.5">
+                    <Globe size={14} className="text-zinc-500" />
+                    <span className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
+                      Agents live
+                    </span>
+                  </div>
+                  <AgentBoard events={agents} visible={true} />
+                </div>
+              )}
+
               {displayMessages.map((msg, i) => {
                 if (msg.role === 'user' && msg.previewUrls && msg.previewUrls.length) {
                   return (
@@ -794,6 +966,24 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
                           Again
                         </button>
                       </div>
+                    </div>
+                  );
+                }
+
+                // Normal assistant message + sources + artifact
+                if (msg.role === 'assistant') {
+                  return (
+                    <div key={i} className="mb-6">
+                      <Message role={msg.role} content={msg.content} />
+                      {(msg.sources || (i === displayMessages.length - 1 && activeSources)) && (
+                        <SourcesList
+                          sources={msg.sources || activeSources?.sources}
+                          checks={msg.checks || activeSources?.checks}
+                        />
+                      )}
+                      {(msg.artifactHtml || (i === displayMessages.length - 1 && activeArtifact)) && (
+                        <ArtifactFrame html={msg.artifactHtml || activeArtifact} />
+                      )}
                     </div>
                   );
                 }
