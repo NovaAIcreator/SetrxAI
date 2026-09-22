@@ -13,25 +13,30 @@ export default function DinoGame({ active = true }) {
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const W = 360;
-    const H = 150;
+    const H = 160;
     canvas.width = W * dpr;
     canvas.height = H * dpr;
     canvas.style.width = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    let x = 42;
-    let y = 98;
+    let x = 44;
+    let y = 104;
     let vy = 0;
     let onGround = true;
-    let speed = 4.4;
+    let speed = 4.5;
     let dist = 0;
     let alive = true;
     let score = 0;
-    let spawn = 40;
+    let spawn = 50;
     let raf = 0;
-    const groundY = 118;
+    const groundY = 124;
     const obstacles = [];
+    const clouds = [
+      { x: 40, y: 28, s: 1 },
+      { x: 160, y: 18, s: 0.8 },
+      { x: 280, y: 34, s: 1.1 },
+    ];
 
     function jump() {
       if (!alive) {
@@ -39,15 +44,15 @@ export default function DinoGame({ active = true }) {
         obstacles.length = 0;
         dist = 0;
         score = 0;
-        speed = 4.4;
-        y = 98;
+        speed = 4.5;
+        y = 104;
         vy = 0;
         onGround = true;
-        spawn = 40;
+        spawn = 50;
         return;
       }
       if (onGround) {
-        vy = -10.2;
+        vy = -10.5;
         onGround = false;
       }
     }
@@ -62,45 +67,86 @@ export default function DinoGame({ active = true }) {
     canvas.addEventListener('pointerdown', jump);
     window.addEventListener('keydown', onKey);
 
-    function drawDino(px, py, running) {
+    function drawCloud(c) {
+      ctx.fillStyle = 'rgba(22,22,22,0.12)';
+      const s = c.s;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 10 * s, 0, Math.PI * 2);
+      ctx.arc(c.x + 12 * s, c.y - 4 * s, 12 * s, 0, Math.PI * 2);
+      ctx.arc(c.x + 24 * s, c.y, 9 * s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawDino(px, py) {
+      const legPhase = alive && onGround ? Math.floor(dist / 5) % 2 : 0;
+      // shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.08)';
+      ctx.beginPath();
+      ctx.ellipse(px + 12, groundY + 2, 14, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#2f4a38';
+      // leg back
+      ctx.fillRect(px + 5, py + 22, 5, legPhase ? 10 : 7);
       // body
-      ctx.fillStyle = '#3d5c45';
-      ctx.fillRect(px, py + 6, 22, 16);
+      ctx.fillRect(px + 2, py + 8, 20, 16);
+      // tail
+      ctx.fillRect(px - 6, py + 12, 8, 4);
       // head
-      ctx.fillRect(px + 14, py - 2, 14, 12);
+      ctx.fillRect(px + 16, py, 16, 12);
+      // snout
+      ctx.fillRect(px + 28, py + 4, 6, 6);
       // eye
       ctx.fillStyle = '#f4f1ea';
-      ctx.fillRect(px + 22, py + 1, 3, 3);
-      // leg animation
-      const leg = running && alive ? (Math.floor(dist / 6) % 2 === 0 ? 0 : 4) : 0;
-      ctx.fillStyle = '#3d5c45';
-      ctx.fillRect(px + 4, py + 20, 5, 8 + (leg ? 0 : 2));
-      ctx.fillRect(px + 13, py + 20, 5, 8 + (leg ? 2 : 0));
+      ctx.fillRect(px + 26, py + 3, 3, 3);
+      ctx.fillStyle = '#111';
+      ctx.fillRect(px + 27, py + 4, 1.5, 1.5);
+      // belly stripe
+      ctx.fillStyle = '#3d6249';
+      ctx.fillRect(px + 6, py + 14, 12, 6);
+      // front leg
+      ctx.fillStyle = '#2f4a38';
+      ctx.fillRect(px + 14, py + 22, 5, legPhase ? 7 : 10);
       // arm
-      ctx.fillRect(px + 8, py + 10, 8, 3);
+      ctx.fillRect(px + 10, py + 12, 7, 3);
     }
 
     function drawCactus(c) {
+      const base = groundY - c.h;
+      // texture stripes
       ctx.fillStyle = '#1a1a1a';
-      // main stem
-      ctx.fillRect(c.x, groundY - c.h, c.w, c.h);
-      // arms
-      if (c.h > 28) {
-        ctx.fillRect(c.x - 6, groundY - c.h + 8, 6, 4);
-        ctx.fillRect(c.x - 6, groundY - c.h + 8, 3, 12);
-        ctx.fillRect(c.x + c.w, groundY - c.h + 14, 6, 4);
-        ctx.fillRect(c.x + c.w + 3, groundY - c.h + 14, 3, 10);
+      ctx.fillRect(c.x, base, c.w, c.h);
+      ctx.fillStyle = '#2a2a2a';
+      ctx.fillRect(c.x + 2, base + 4, 2, c.h - 8);
+      if (c.h > 30) {
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(c.x - 7, base + 10, 7, 4);
+        ctx.fillRect(c.x - 7, base + 10, 3, 14);
+        ctx.fillRect(c.x + c.w, base + 16, 7, 4);
+        ctx.fillRect(c.x + c.w + 4, base + 16, 3, 12);
       }
     }
 
     function tick() {
       raf = requestAnimationFrame(tick);
 
-      // sky
-      ctx.fillStyle = '#f4f1ea';
+      // sky gradient
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#ebe6dc');
+      g.addColorStop(1, '#f4f1ea');
+      ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, H);
 
-      // ground line
+      // clouds
+      for (const c of clouds) {
+        if (activeRef.current && alive) c.x -= 0.35 * c.s;
+        if (c.x < -40) c.x = W + 20;
+        drawCloud(c);
+      }
+
+      // ground band
+      ctx.fillStyle = '#e0d9cc';
+      ctx.fillRect(0, groundY, W, H - groundY);
       ctx.strokeStyle = '#161616';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -108,69 +154,62 @@ export default function DinoGame({ active = true }) {
       ctx.lineTo(W, groundY);
       ctx.stroke();
 
-      // ground dots
-      ctx.fillStyle = '#c9c4b8';
-      for (let i = 0; i < 12; i++) {
-        const gx = ((i * 40 - (dist % 40)) + W) % W;
-        ctx.fillRect(gx, groundY + 6, 3, 2);
+      // ground texture
+      ctx.fillStyle = '#cfc6b6';
+      for (let i = 0; i < 18; i++) {
+        const gx = ((i * 28 - (dist * 0.8) % 28) + W) % W;
+        ctx.fillRect(gx, groundY + 8 + (i % 3) * 4, 4, 2);
       }
 
       if (!activeRef.current) {
         ctx.fillStyle = '#5c5a54';
-        ctx.font = '12px system-ui, sans-serif';
-        ctx.fillText('Paused — image almost ready', 14, 28);
-        drawDino(x, y, false);
+        ctx.font = '12px system-ui,sans-serif';
+        ctx.fillText('Paused — finishing image…', 14, 26);
+        drawDino(x, y);
         return;
       }
 
       if (alive) {
-        vy += 0.58;
+        vy += 0.6;
         y += vy;
-        if (y >= 98) {
-          y = 98;
+        if (y >= 104) {
+          y = 104;
           vy = 0;
           onGround = true;
         }
-
         spawn -= 1;
         if (spawn <= 0) {
           obstacles.push({
-            x: W + 8,
-            w: 10 + Math.random() * 8,
-            h: 24 + Math.random() * 22,
+            x: W + 10,
+            w: 11 + Math.random() * 7,
+            h: 26 + Math.random() * 24,
           });
-          spawn = 55 + Math.random() * 75;
+          spawn = 50 + Math.random() * 70;
         }
-
         for (const c of obstacles) c.x -= speed;
-        while (obstacles.length && obstacles[0].x < -50) obstacles.shift();
-
+        while (obstacles.length && obstacles[0].x < -60) obstacles.shift();
         dist += speed;
         score = Math.floor(dist / 10);
-        speed = 4.4 + dist / 1600;
-
-        // collision
+        speed = 4.5 + dist / 1500;
         for (const c of obstacles) {
-          if (x + 24 > c.x && x + 4 < c.x + c.w && y + 26 > groundY - c.h) {
-            alive = false;
-          }
+          if (x + 26 > c.x && x + 4 < c.x + c.w && y + 28 > groundY - c.h) alive = false;
         }
       }
 
       for (const c of obstacles) drawCactus(c);
-      drawDino(x, y, alive);
+      drawDino(x, y);
 
       ctx.fillStyle = '#161616';
       ctx.font = 'bold 12px monospace';
-      ctx.fillText('SCORE ' + score, W - 100, 22);
+      ctx.fillText('SCORE ' + score, W - 98, 22);
 
       if (!alive) {
         ctx.fillStyle = '#161616';
-        ctx.font = '12px system-ui, sans-serif';
+        ctx.font = '12px system-ui,sans-serif';
         ctx.fillText('TAP / SPACE TO RETRY', 14, 22);
       } else {
-        ctx.fillStyle = '#5c5a54';
-        ctx.font = '11px system-ui, sans-serif';
+        ctx.fillStyle = '#6b665c';
+        ctx.font = '11px system-ui,sans-serif';
         ctx.fillText('Space / tap to jump', 14, 22);
       }
     }
@@ -186,8 +225,8 @@ export default function DinoGame({ active = true }) {
   return (
     <canvas
       ref={canvasRef}
-      className="block mx-auto touch-none"
-      style={{ width: 360, height: 150, maxWidth: '100%' }}
+      className="block mx-auto touch-none rounded-lg"
+      style={{ width: 360, height: 160, maxWidth: '100%' }}
     />
   );
 }
