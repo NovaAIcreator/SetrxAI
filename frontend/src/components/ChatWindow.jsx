@@ -9,15 +9,13 @@ import {
   Plus,
   ChevronDown,
   Check,
-  Radar,
-  Beaker,
-  PenLine,
   Image as ImageIcon,
 } from 'lucide-react';
 import Message from './Message';
 import ModeHero from './ModeHero';
 import SourcesList from './SourcesList';
 import ArtifactFrame from './ArtifactFrame';
+import DinoGame from './DinoGame';
 import { useUsage } from './UsageMeter';
 import { api } from '../api';
 
@@ -27,35 +25,265 @@ const MODES = [
   { id: 'coding', label: 'Coding', hint: 'Full working code' },
 ];
 
+/* ── Smile ball (Grok-style) ── */
+function SmileBall({ size = 28, tone = 'sky', pulse = false }) {
+  const gradients = {
+    sky: 'from-sky-400 to-blue-600',
+    violet: 'from-violet-400 to-purple-600',
+    emerald: 'from-emerald-400 to-teal-600',
+    zinc: 'from-zinc-400 to-zinc-600',
+  };
+  return (
+    <div
+      className={
+        'relative shrink-0 rounded-full bg-gradient-to-br shadow-md ' +
+        (gradients[tone] || gradients.zinc) +
+        (pulse ? ' animate-pulse' : '')
+      }
+      style={{ width: size, height: size }}
+    >
+      {/* eyes */}
+      <div className="absolute inset-0 flex items-center justify-center gap-[18%]">
+        <div
+          className="rounded-full bg-white/95"
+          style={{ width: size * 0.14, height: size * 0.14 }}
+        />
+        <div
+          className="rounded-full bg-white/95"
+          style={{ width: size * 0.14, height: size * 0.14 }}
+        />
+      </div>
+      {/* smile */}
+      <div
+        className="absolute left-1/2 -translate-x-1/2 border-b-2 border-white/90 rounded-b-full"
+        style={{
+          width: size * 0.42,
+          height: size * 0.2,
+          bottom: size * 0.22,
+        }}
+      />
+    </div>
+  );
+}
+
 const AGENT_META = {
   scout: {
     id: 'scout',
     label: 'Scout',
     role: 'Web search & sources',
-    icon: Radar,
-    color: 'text-sky-500',
-    bar: 'bg-sky-500',
-    ring: 'ring-sky-500/30',
+    tone: 'sky',
   },
   lab: {
     id: 'lab',
     label: 'Lab',
     role: 'Experiment & verify',
-    icon: Beaker,
-    color: 'text-violet-500',
-    bar: 'bg-violet-500',
-    ring: 'ring-violet-500/30',
+    tone: 'violet',
   },
   writer: {
     id: 'writer',
     label: 'Writer',
     role: 'Final answer',
-    icon: PenLine,
-    color: 'text-emerald-500',
-    bar: 'bg-emerald-500',
-    ring: 'ring-emerald-500/30',
+    tone: 'emerald',
   },
 };
+
+/** All 3 agents — small transparent bubbles (Grok-style thinking) */
+function AgentsLive({ agents, visible }) {
+  if (!visible) return null;
+
+  return (
+    <div className="mb-5 space-y-2">
+      {['scout', 'lab', 'writer'].map((id) => {
+        const a = agents[id] || { status: 'idle', detail: '' };
+        const meta = AGENT_META[id];
+        const running = a.status === 'running';
+        const done = a.status === 'done';
+        const waiting = a.status === 'idle' || a.status === 'waiting';
+
+        return (
+          <div
+            key={id}
+            className={
+              'flex items-start gap-2.5 rounded-2xl px-3 py-2.5 transition-all duration-300 ' +
+              'border border-white/10 bg-white/40 dark:bg-white/[0.04] backdrop-blur-md ' +
+              (running
+                ? 'opacity-100 scale-[1.01]'
+                : done
+                ? 'opacity-90'
+                : 'opacity-55')
+            }
+          >
+            <SmileBall size={30} tone={meta.tone} pulse={running} />
+            <div className="min-w-0 flex-1 pt-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[13px] font-semibold text-zinc-800 dark:text-zinc-100">
+                  {meta.label}
+                </span>
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                  {meta.role}
+                </span>
+                <span
+                  className={
+                    'ml-auto text-[10px] font-medium uppercase tracking-wide ' +
+                    (running
+                      ? 'text-zinc-700 dark:text-zinc-200'
+                      : done
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-zinc-400')
+                  }
+                >
+                  {running ? 'Working' : done ? 'Done' : 'Waiting'}
+                </span>
+              </div>
+              <p className="mt-0.5 text-[12.5px] leading-snug text-zinc-600 dark:text-zinc-300">
+                {a.detail ||
+                  (running
+                    ? 'Working…'
+                    : done
+                    ? 'Finished'
+                    : waiting
+                    ? 'Queued…'
+                    : '—')}
+              </p>
+              {running && (
+                <div className="mt-2 h-[2px] overflow-hidden rounded-full bg-zinc-200/60 dark:bg-white/10">
+                  <div
+                    className="h-full w-1/3 rounded-full bg-zinc-500/70 dark:bg-white/50"
+                    style={{ animation: 'agent-slide 1.15s ease-in-out infinite' }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      <style>{`
+        @keyframes agent-slide {
+          0% { transform: translateX(-120%); }
+          100% { transform: translateX(420%); }
+        }
+        @keyframes img-shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+        @keyframes img-pulse-soft {
+          0%, 100% { opacity: 0.55; }
+          50% { opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/** ChatGPT-style image generation panel + Dino game */
+function ImageGenPanel({ loading, onDoneHint }) {
+  const [playGame, setPlayGame] = useState(false);
+
+  useEffect(() => {
+    if (!loading) setPlayGame(false);
+  }, [loading]);
+
+  if (!loading) return null;
+
+  return (
+    <div className="mb-6 overflow-hidden rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-zinc-900/90 shadow-lg">
+      {/* big header area */}
+      <div className="relative px-5 pt-5 pb-4">
+        <div className="flex items-center gap-3 mb-4">
+          <SmileBall size={36} tone="violet" pulse />
+          <div>
+            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              Creating your image
+            </p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              This usually takes a few seconds…
+            </p>
+          </div>
+        </div>
+
+        {/* shimmer placeholder (ChatGPT-like) */}
+        <div
+          className="relative w-full aspect-[4/3] max-h-[280px] rounded-2xl overflow-hidden border border-zinc-100 dark:border-white/5"
+          style={{
+            background:
+              'linear-gradient(110deg, #e4e4e7 25%, #f4f4f5 37%, #e4e4e7 63%)',
+            backgroundSize: '200% 100%',
+            animation: 'img-shimmer 1.6s linear infinite',
+          }}
+        >
+          <div className="absolute inset-0 dark:hidden" />
+          <div
+            className="absolute inset-0 hidden dark:block"
+            style={{
+              background:
+                'linear-gradient(110deg, #27272a 25%, #3f3f46 37%, #27272a 63%)',
+              backgroundSize: '200% 100%',
+              animation: 'img-shimmer 1.6s linear infinite',
+            }}
+          />
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+            <SmileBall size={48} tone="violet" pulse />
+            <p
+              className="text-sm font-medium text-zinc-600 dark:text-zinc-300"
+              style={{ animation: 'img-pulse-soft 1.8s ease-in-out infinite' }}
+            >
+              Generating…
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tap to play game */}
+      <div className="border-t border-zinc-100 dark:border-white/10 px-4 py-3 bg-zinc-50/80 dark:bg-black/20">
+        {!playGame ? (
+          <button
+            type="button"
+            onClick={() => setPlayGame(true)}
+            className="w-full rounded-xl border border-dashed border-zinc-300 dark:border-white/15 py-3 text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-white/5 transition"
+          >
+            Tap to play game
+          </button>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-zinc-500">Dino Run</span>
+              <button
+                type="button"
+                onClick={() => setPlayGame(false)}
+                className="text-xs text-zinc-400 hover:text-zinc-600"
+              >
+                Hide
+              </button>
+            </div>
+            <div className="flex justify-center rounded-xl overflow-hidden border border-zinc-200 dark:border-white/10 bg-[#f4f1ea]">
+              <DinoGame active={loading && playGame} />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ImageLimitPill({ remaining, limit }) {
+  const low = remaining <= 2;
+  return (
+    <div
+      className={
+        'mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs ' +
+        (low
+          ? 'border-amber-300/60 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'
+          : 'border-zinc-200 bg-white/80 text-zinc-600 dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300')
+      }
+    >
+      <ImageIcon size={13} className="opacity-70" />
+      <span className="tabular-nums font-medium">
+        {remaining}/{limit}
+      </span>
+      <span className="text-zinc-400 dark:text-zinc-500">images today</span>
+    </div>
+  );
+}
 
 function ModePill({ mode, setMode }) {
   const [open, setOpen] = useState(false);
@@ -118,116 +346,6 @@ function ModePill({ mode, setMode }) {
   );
 }
 
-/** Simple live agent cards with animation — only active agents shown */
-function AgentsLive({ agents }) {
-  const list = ['scout', 'lab', 'writer']
-    .map((id) => ({ id, ...agents[id], meta: AGENT_META[id] }))
-    .filter((a) => a.status && a.status !== 'idle');
-
-  if (!list.length) return null;
-
-  return (
-    <div className="mb-5 space-y-2">
-      {list.map((a) => {
-        const Icon = a.meta.icon;
-        const running = a.status === 'running';
-        const done = a.status === 'done';
-        return (
-          <div
-            key={a.id}
-            className={
-              'relative overflow-hidden rounded-2xl border border-zinc-200/80 dark:border-white/10 ' +
-              'bg-white/90 dark:bg-zinc-900/80 backdrop-blur px-3.5 py-3 ' +
-              'transition-all duration-300 ' +
-              (running ? 'ring-2 ' + a.meta.ring : '')
-            }
-          >
-            <div className="flex items-start gap-3">
-              <div
-                className={
-                  'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ' +
-                  'bg-zinc-100 dark:bg-zinc-800 ' +
-                  a.meta.color
-                }
-              >
-                <Icon
-                  size={18}
-                  className={running ? 'animate-pulse' : ''}
-                  strokeWidth={1.75}
-                />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                    {a.meta.label}
-                  </span>
-                  <span className="text-[11px] text-zinc-400">{a.meta.role}</span>
-                  <span
-                    className={
-                      'ml-auto text-[10px] font-medium uppercase tracking-wide ' +
-                      (running
-                        ? 'text-zinc-800 dark:text-zinc-200'
-                        : done
-                        ? 'text-emerald-600 dark:text-emerald-400'
-                        : 'text-zinc-400')
-                    }
-                  >
-                    {running ? 'Working' : done ? 'Done' : a.status}
-                  </span>
-                </div>
-                <p className="mt-0.5 text-[13px] leading-snug text-zinc-600 dark:text-zinc-300">
-                  {a.detail || (running ? 'Working…' : '—')}
-                </p>
-              </div>
-            </div>
-
-            {/* progress bar animation */}
-            {running && (
-              <div className="mt-3 h-0.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                <div
-                  className={'h-full w-1/3 rounded-full ' + a.meta.bar}
-                  style={{
-                    animation: 'agent-slide 1.2s ease-in-out infinite',
-                  }}
-                />
-              </div>
-            )}
-            {done && (
-              <div className="mt-3 h-0.5 rounded-full bg-emerald-500/80" />
-            )}
-          </div>
-        );
-      })}
-      <style>{`
-        @keyframes agent-slide {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(400%); }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-function ImageLimitPill({ remaining, limit }) {
-  const low = remaining <= 2;
-  return (
-    <div
-      className={
-        'mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs ' +
-        (low
-          ? 'border-amber-300/60 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'
-          : 'border-zinc-200 bg-white text-zinc-600 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-300')
-      }
-    >
-      <ImageIcon size={13} className="opacity-70" />
-      <span className="tabular-nums font-medium">
-        {remaining}/{limit}
-      </span>
-      <span className="text-zinc-400 dark:text-zinc-500">images today</span>
-    </div>
-  );
-}
-
 const IMAGE_KEYWORDS = [
   'image', 'photo', 'picture', 'draw', 'generate image', 'create image',
   'banao image', 'tasveer', 'wallpaper', 'poster', 'illustration', 'banao', 'bana do',
@@ -253,7 +371,6 @@ function detectIntent(text, hasPhoto, forceImageGen) {
 function needsSearch(text, mode) {
   const lower = (text || '').toLowerCase();
   if (SEARCH_KEYWORDS.some((k) => lower.includes(k))) return true;
-  // coding/study pure knowledge — default no search
   if (mode === 'coding' || mode === 'study') return false;
   return false;
 }
@@ -275,6 +392,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
   const [parsingFile, setParsingFile] = useState(false);
   const [fileError, setFileError] = useState('');
   const [lightbox, setLightbox] = useState(null);
+  const [showAgents, setShowAgents] = useState(false);
 
   const [agents, setAgents] = useState({
     scout: { status: 'idle', detail: '' },
@@ -314,7 +432,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
       c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
       shouldScrollRef.current = false;
     }
-  }, [messages, agents, isEmpty]);
+  }, [messages, agents, imgLoading, isEmpty]);
 
   useEffect(() => {
     const h = (e) => {
@@ -349,11 +467,13 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     }));
   };
 
-  const resetAgents = () => {
+  /** Show all 3 at once: waiting → running → done */
+  const startAllAgentsWaiting = () => {
+    setShowAgents(true);
     setAgents({
-      scout: { status: 'idle', detail: '' },
-      lab: { status: 'idle', detail: '' },
-      writer: { status: 'idle', detail: '' },
+      scout: { status: 'waiting', detail: 'Queued…' },
+      lab: { status: 'waiting', detail: 'Queued…' },
+      writer: { status: 'waiting', detail: 'Queued…' },
     });
   };
 
@@ -421,7 +541,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
         prev.concat([
           {
             role: 'assistant',
-            content: `Aaj ki image limit khatam ho chuki hai (${imageLimit}/day). Kal try karo.`,
+            content: `Aaj ki image limit khatam (${imageLimit}/day). Kal try karo.`,
           },
         ])
       );
@@ -432,6 +552,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     if ((!prompt && !photo) || imgLoading) return;
     setImgLoading(true);
     setForceImageGen(false);
+    setShowAgents(false);
     lastImageJob.current = { prompt, photo: photo || null };
     shouldScrollRef.current = true;
     const userLabel = photo
@@ -532,6 +653,9 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     const fileToSend = attachedFile ? { name: attachedFile.name, text: attachedFile.text } : null;
     const queryText = input.trim() || displayText;
     const doSearch = needsSearch(queryText, mode);
+    const wantLab =
+      mode === 'coding' ||
+      /code|html|react|component|experiment|test|debug/i.test(queryText);
 
     setInput('');
     setImagePreviews([]);
@@ -541,7 +665,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     setWaitingFirstChunk(true);
     setActiveSources(null);
     setActiveArtifact(null);
-    resetAgents();
+    startAllAgentsWaiting(); // ← all 3 visible immediately
     setMessages((prev) => prev.concat([{ role: 'assistant', content: '' }]));
 
     if (textareaRef.current) {
@@ -549,49 +673,49 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     }
 
     try {
-      // ——— Agents (simple, only real work) ———
       let scoutResult = null;
       let labHtml = null;
 
+      // Scout
       if (doSearch) {
         setAgent('scout', { status: 'running', detail: 'Searching the web…' });
-        await delay(650);
-        setAgent('scout', { status: 'running', detail: 'Picking best sources…' });
-        await delay(500);
+        await delay(600);
+        setAgent('scout', { status: 'running', detail: 'Choosing best sources…' });
+        await delay(450);
         setAgent('scout', { status: 'done', detail: 'Sources ready' });
         scoutResult = {
           sources: [
             {
               title: 'Reference source',
               url: 'https://en.wikipedia.org/wiki/Main_Page',
-              snippet: 'Grounding source (demo until backend search is live).',
+              snippet: 'Demo source until backend search is live.',
             },
           ],
-          checks: [{ note: 'Search used only because query needed fresh info' }],
+          checks: [{ note: 'Search only when needed' }],
         };
         setActiveSources(scoutResult);
+      } else {
+        setAgent('scout', { status: 'done', detail: 'No search needed' });
       }
 
-      // Lab only when coding / experiment-ish
-      const wantLab =
-        mode === 'coding' ||
-        /code|html|react|component|experiment|test|debug/i.test(queryText);
-
+      // Lab
       if (wantLab) {
         setAgent('lab', { status: 'running', detail: 'Running experiment…' });
-        await delay(600);
-        setAgent('lab', { status: 'running', detail: 'Checking result…' });
-        await delay(450);
+        await delay(550);
+        setAgent('lab', { status: 'running', detail: 'Verifying…' });
+        await delay(400);
         setAgent('lab', { status: 'done', detail: 'Experiment done' });
         labHtml = `<h2 style="margin:0 0 8px">Lab</h2>
-<p style="margin:0 0 12px;color:#555">Quick experiment for your request.</p>
-<pre style="background:#111;color:#e5e5e5;padding:12px;border-radius:10px;overflow:auto;font-size:13px">// verified sketch
-function ok() { return true; }</pre>`;
+<p style="margin:0 0 12px;color:#555">Quick check for your request.</p>
+<pre style="background:#111;color:#e5e5e5;padding:12px;border-radius:10px;overflow:auto;font-size:13px">// ok
+function check() { return true; }</pre>`;
         setActiveArtifact(labHtml);
+      } else {
+        setAgent('lab', { status: 'done', detail: 'Skipped' });
       }
 
-      setAgent('writer', { status: 'running', detail: 'Writing accurate answer…' });
-      await delay(350);
+      // Writer
+      setAgent('writer', { status: 'running', detail: 'Writing answer…' });
 
       const response = await api.chatStream(
         mode,
@@ -698,6 +822,8 @@ function ok() { return true; }</pre>`;
     } finally {
       setLoading(false);
       setWaitingFirstChunk(false);
+      // agents board thodi der dikhe, phir soft hide
+      setTimeout(() => setShowAgents(false), 2200);
     }
   };
 
@@ -721,7 +847,6 @@ function ok() { return true; }</pre>`;
     !imgLoading &&
     (input.trim().length > 0 || imagePreviews.length > 0 || !!attachedFile);
 
-  // ——— Composer: same style as original, no extra limit text inside ———
   const composer = (
     <div className="w-full max-w-2xl mx-auto relative z-20">
       {imagePreviews.length > 0 && (
@@ -777,14 +902,7 @@ function ok() { return true; }</pre>`;
         </div>
 
         <div className="flex items-center gap-1 px-2 pb-2 pt-1 border-t border-zinc-100 dark:border-white/[0.06] relative z-40">
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            ref={fileInputRef}
-            onChange={handleImageSelect}
-            className="hidden"
-          />
+          <input type="file" accept="image/*" multiple ref={fileInputRef} onChange={handleImageSelect} className="hidden" />
           <input
             type="file"
             accept=".pdf,.docx,.txt,.csv,.js,.jsx,.ts,.tsx,.py,.json,.md,.html,.css"
@@ -902,11 +1020,13 @@ function ok() { return true; }</pre>`;
         <>
           <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto">
             <div className="max-w-2xl mx-auto w-full px-3 sm:px-4 py-6">
-              {/* Image limit — chat area top, not in typebox */}
               <ImageLimitPill remaining={imageLeft} limit={imageLimit} />
 
-              {/* Live agents — only when working */}
-              <AgentsLive agents={agents} />
+              {/* 3 agents — always all three when pipeline runs */}
+              <AgentsLive agents={agents} visible={showAgents || loading} />
+
+              {/* Big image-gen box in chat history area */}
+              <ImageGenPanel loading={imgLoading} />
 
               {displayMessages.map((msg, i) => {
                 if (msg.role === 'user' && msg.previewUrls && msg.previewUrls.length) {
@@ -964,11 +1084,7 @@ function ok() { return true; }</pre>`;
                         <a href={imgUrl} target="_blank" rel="noreferrer" className="hover:underline">
                           Download
                         </a>
-                        <button
-                          type="button"
-                          className="hover:underline"
-                          onClick={() => useImageForEdit(imgUrl)}
-                        >
+                        <button type="button" className="hover:underline" onClick={() => useImageForEdit(imgUrl)}>
                           Edit
                         </button>
                         <button
@@ -1006,12 +1122,6 @@ function ok() { return true; }</pre>`;
 
                 return <Message key={i} role={msg.role} content={msg.content} />;
               })}
-
-              {imgLoading && (
-                <div className="mb-4 rounded-2xl border border-zinc-200 dark:border-white/10 bg-white/80 dark:bg-zinc-900/80 px-4 py-3 text-sm text-zinc-500">
-                  Generating image…
-                </div>
-              )}
             </div>
           </div>
 
