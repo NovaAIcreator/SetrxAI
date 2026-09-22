@@ -25,8 +25,8 @@ const MODES = [
   { id: 'coding', label: 'Coding', hint: 'Full working code' },
 ];
 
-/* ── Smile ball (Grok-style) ── */
-function SmileBall({ size = 28, tone = 'sky', pulse = false }) {
+/* Smile ball + bounce */
+function SmileBall({ size = 22, tone = 'sky', bounce = false }) {
   const gradients = {
     sky: 'from-sky-400 to-blue-600',
     violet: 'from-violet-400 to-purple-600',
@@ -36,121 +36,80 @@ function SmileBall({ size = 28, tone = 'sky', pulse = false }) {
   return (
     <div
       className={
-        'relative shrink-0 rounded-full bg-gradient-to-br shadow-md ' +
-        (gradients[tone] || gradients.zinc) +
-        (pulse ? ' animate-pulse' : '')
+        'relative shrink-0 rounded-full bg-gradient-to-br shadow-sm ' +
+        (gradients[tone] || gradients.zinc)
       }
-      style={{ width: size, height: size }}
+      style={{
+        width: size,
+        height: size,
+        animation: bounce ? 'ball-bounce 0.7s ease-in-out infinite' : undefined,
+      }}
     >
-      {/* eyes */}
       <div className="absolute inset-0 flex items-center justify-center gap-[18%]">
-        <div
-          className="rounded-full bg-white/95"
-          style={{ width: size * 0.14, height: size * 0.14 }}
-        />
-        <div
-          className="rounded-full bg-white/95"
-          style={{ width: size * 0.14, height: size * 0.14 }}
-        />
+        <div className="rounded-full bg-white/95" style={{ width: size * 0.15, height: size * 0.15 }} />
+        <div className="rounded-full bg-white/95" style={{ width: size * 0.15, height: size * 0.15 }} />
       </div>
-      {/* smile */}
       <div
         className="absolute left-1/2 -translate-x-1/2 border-b-2 border-white/90 rounded-b-full"
-        style={{
-          width: size * 0.42,
-          height: size * 0.2,
-          bottom: size * 0.22,
-        }}
+        style={{ width: size * 0.4, height: size * 0.18, bottom: size * 0.22 }}
       />
     </div>
   );
 }
 
 const AGENT_META = {
-  scout: {
-    id: 'scout',
-    label: 'Scout',
-    role: 'Web search & sources',
-    tone: 'sky',
-  },
-  lab: {
-    id: 'lab',
-    label: 'Lab',
-    role: 'Experiment & verify',
-    tone: 'violet',
-  },
-  writer: {
-    id: 'writer',
-    label: 'Writer',
-    role: 'Final answer',
-    tone: 'emerald',
-  },
+  scout: { label: 'Scout', tone: 'sky' },
+  lab: { label: 'Lab', tone: 'violet' },
+  writer: { label: 'Writer', tone: 'emerald' },
 };
 
-/** All 3 agents — small transparent bubbles (Grok-style thinking) */
-function AgentsLive({ agents, visible }) {
-  if (!visible) return null;
+/** Free-floating transparent agent rows (no boxes) — Grok style */
+function AgentThoughts({ agents, show }) {
+  if (!show || !agents) return null;
+  const order = ['scout', 'lab', 'writer'];
 
   return (
-    <div className="mb-5 space-y-2">
-      {['scout', 'lab', 'writer'].map((id) => {
-        const a = agents[id] || { status: 'idle', detail: '' };
+    <div className="mb-3 ml-0.5 space-y-2.5 max-w-[95%]">
+      {order.map((id) => {
+        const a = agents[id];
+        if (!a || a.status === 'hidden') return null;
         const meta = AGENT_META[id];
         const running = a.status === 'running';
         const done = a.status === 'done';
-        const waiting = a.status === 'idle' || a.status === 'waiting';
 
         return (
           <div
             key={id}
             className={
-              'flex items-start gap-2.5 rounded-2xl px-3 py-2.5 transition-all duration-300 ' +
-              'border border-white/10 bg-white/40 dark:bg-white/[0.04] backdrop-blur-md ' +
-              (running
-                ? 'opacity-100 scale-[1.01]'
-                : done
-                ? 'opacity-90'
-                : 'opacity-55')
+              'flex items-start gap-2 transition-all duration-500 ' +
+              (running ? 'opacity-100' : done ? 'opacity-70' : 'opacity-45')
             }
           >
-            <SmileBall size={30} tone={meta.tone} pulse={running} />
-            <div className="min-w-0 flex-1 pt-0.5">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[13px] font-semibold text-zinc-800 dark:text-zinc-100">
+            <SmileBall size={22} tone={meta.tone} bounce={running} />
+            <div className="min-w-0 pt-0.5">
+              <div className="flex items-baseline gap-1.5 flex-wrap">
+                <span className="text-[12px] font-semibold text-zinc-700 dark:text-zinc-200">
                   {meta.label}
                 </span>
-                <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                  {meta.role}
-                </span>
-                <span
-                  className={
-                    'ml-auto text-[10px] font-medium uppercase tracking-wide ' +
-                    (running
-                      ? 'text-zinc-700 dark:text-zinc-200'
-                      : done
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : 'text-zinc-400')
-                  }
-                >
-                  {running ? 'Working' : done ? 'Done' : 'Waiting'}
+                <span className="text-[11px] text-zinc-500 dark:text-zinc-400 font-normal">
+                  {a.detail || (running ? 'Working…' : done ? 'Done' : 'Waiting…')}
                 </span>
               </div>
-              <p className="mt-0.5 text-[12.5px] leading-snug text-zinc-600 dark:text-zinc-300">
-                {a.detail ||
-                  (running
-                    ? 'Working…'
-                    : done
-                    ? 'Finished'
-                    : waiting
-                    ? 'Queued…'
-                    : '—')}
-              </p>
-              {running && (
-                <div className="mt-2 h-[2px] overflow-hidden rounded-full bg-zinc-200/60 dark:bg-white/10">
-                  <div
-                    className="h-full w-1/3 rounded-full bg-zinc-500/70 dark:bg-white/50"
-                    style={{ animation: 'agent-slide 1.15s ease-in-out infinite' }}
-                  />
+              {a.lines?.length > 0 && (
+                <div className="mt-1 space-y-0.5 border-l border-zinc-300/40 dark:border-white/10 pl-2.5">
+                  {a.lines.map((line, i) => (
+                    <p
+                      key={i}
+                      className={
+                        'text-[11.5px] leading-relaxed ' +
+                        (i === a.lines.length - 1 && running
+                          ? 'text-zinc-600 dark:text-zinc-300'
+                          : 'text-zinc-400 dark:text-zinc-500')
+                      }
+                    >
+                      {line}
+                    </p>
+                  ))}
                 </div>
               )}
             </div>
@@ -158,106 +117,78 @@ function AgentsLive({ agents, visible }) {
         );
       })}
       <style>{`
-        @keyframes agent-slide {
-          0% { transform: translateX(-120%); }
-          100% { transform: translateX(420%); }
+        @keyframes ball-bounce {
+          0%, 100% { transform: translateY(0); }
+          40% { transform: translateY(-5px); }
+          60% { transform: translateY(-2px); }
         }
         @keyframes img-shimmer {
           0% { background-position: 200% 0; }
           100% { background-position: -200% 0; }
-        }
-        @keyframes img-pulse-soft {
-          0%, 100% { opacity: 0.55; }
-          50% { opacity: 1; }
         }
       `}</style>
     </div>
   );
 }
 
-/** ChatGPT-style image generation panel + Dino game */
-function ImageGenPanel({ loading, onDoneHint }) {
+/** Large image-gen panel inside chat history */
+function ImageGenPanel({ loading }) {
   const [playGame, setPlayGame] = useState(false);
+  const [sec, setSec] = useState(0);
 
   useEffect(() => {
-    if (!loading) setPlayGame(false);
+    if (!loading) {
+      setPlayGame(false);
+      setSec(0);
+      return;
+    }
+    const t = setInterval(() => setSec((s) => s + 1), 1000);
+    return () => clearInterval(t);
   }, [loading]);
 
   if (!loading) return null;
 
   return (
-    <div className="mb-6 overflow-hidden rounded-3xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-zinc-900/90 shadow-lg">
-      {/* big header area */}
-      <div className="relative px-5 pt-5 pb-4">
-        <div className="flex items-center gap-3 mb-4">
-          <SmileBall size={36} tone="violet" pulse />
-          <div>
-            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-              Creating your image
-            </p>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              This usually takes a few seconds…
-            </p>
-          </div>
-        </div>
-
-        {/* shimmer placeholder (ChatGPT-like) */}
-        <div
-          className="relative w-full aspect-[4/3] max-h-[280px] rounded-2xl overflow-hidden border border-zinc-100 dark:border-white/5"
-          style={{
-            background:
-              'linear-gradient(110deg, #e4e4e7 25%, #f4f4f5 37%, #e4e4e7 63%)',
-            backgroundSize: '200% 100%',
-            animation: 'img-shimmer 1.6s linear infinite',
-          }}
-        >
-          <div className="absolute inset-0 dark:hidden" />
-          <div
-            className="absolute inset-0 hidden dark:block"
-            style={{
-              background:
-                'linear-gradient(110deg, #27272a 25%, #3f3f46 37%, #27272a 63%)',
-              backgroundSize: '200% 100%',
-              animation: 'img-shimmer 1.6s linear infinite',
-            }}
-          />
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-            <SmileBall size={48} tone="violet" pulse />
-            <p
-              className="text-sm font-medium text-zinc-600 dark:text-zinc-300"
-              style={{ animation: 'img-pulse-soft 1.8s ease-in-out infinite' }}
-            >
-              Generating…
-            </p>
-          </div>
+    <div className="mb-6 w-full max-w-md">
+      <div className="flex items-center gap-2 mb-3">
+        <SmileBall size={28} tone="violet" bounce />
+        <div>
+          <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
+            Creating your image
+          </p>
+          <p className="text-[11px] text-zinc-500">
+            High quality render · {sec}s
+          </p>
         </div>
       </div>
 
-      {/* Tap to play game */}
-      <div className="border-t border-zinc-100 dark:border-white/10 px-4 py-3 bg-zinc-50/80 dark:bg-black/20">
+      <div
+        className="relative w-full aspect-square max-h-[260px] rounded-2xl overflow-hidden"
+        style={{
+          background:
+            'linear-gradient(110deg, rgba(63,63,70,0.35) 25%, rgba(113,113,122,0.45) 37%, rgba(63,63,70,0.35) 63%)',
+          backgroundSize: '200% 100%',
+          animation: 'img-shimmer 1.8s linear infinite',
+        }}
+      >
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+          <SmileBall size={52} tone="violet" bounce />
+          <p className="text-xs text-zinc-300/90">Generating sharp details…</p>
+        </div>
+      </div>
+
+      <div className="mt-3">
         {!playGame ? (
           <button
             type="button"
             onClick={() => setPlayGame(true)}
-            className="w-full rounded-xl border border-dashed border-zinc-300 dark:border-white/15 py-3 text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-white/5 transition"
+            className="text-[13px] text-zinc-500 dark:text-zinc-400 underline-offset-2 hover:underline"
           >
             Tap to play game
           </button>
         ) : (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-500">Dino Run</span>
-              <button
-                type="button"
-                onClick={() => setPlayGame(false)}
-                className="text-xs text-zinc-400 hover:text-zinc-600"
-              >
-                Hide
-              </button>
-            </div>
-            <div className="flex justify-center rounded-xl overflow-hidden border border-zinc-200 dark:border-white/10 bg-[#f4f1ea]">
-              <DinoGame active={loading && playGame} />
-            </div>
+          <div className="mt-1 rounded-xl overflow-hidden bg-[#f4f1ea]">
+            <DinoGame active={loading && playGame} />
           </div>
         )}
       </div>
@@ -266,21 +197,11 @@ function ImageGenPanel({ loading, onDoneHint }) {
 }
 
 function ImageLimitPill({ remaining, limit }) {
-  const low = remaining <= 2;
   return (
-    <div
-      className={
-        'mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs ' +
-        (low
-          ? 'border-amber-300/60 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'
-          : 'border-zinc-200 bg-white/80 text-zinc-600 dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-300')
-      }
-    >
-      <ImageIcon size={13} className="opacity-70" />
-      <span className="tabular-nums font-medium">
-        {remaining}/{limit}
-      </span>
-      <span className="text-zinc-400 dark:text-zinc-500">images today</span>
+    <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-zinc-200/60 dark:border-white/10 px-2.5 py-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+      <ImageIcon size={12} />
+      <span className="tabular-nums">{remaining}/{limit}</span>
+      <span>images today</span>
     </div>
   );
 }
@@ -326,18 +247,14 @@ function ModePill({ mode, setMode }) {
               }}
               className={
                 'w-full text-left px-3 py-2.5 rounded-xl text-sm flex items-start gap-2 transition ' +
-                (mode === m.id
-                  ? 'bg-zinc-100 dark:bg-zinc-800'
-                  : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/70')
+                (mode === m.id ? 'bg-zinc-100 dark:bg-zinc-800' : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/70')
               }
             >
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-zinc-900 dark:text-zinc-100">{m.label}</div>
                 <div className="text-[11px] text-zinc-500 mt-0.5">{m.hint}</div>
               </div>
-              {mode === m.id && (
-                <Check size={14} className="mt-0.5 text-zinc-700 dark:text-zinc-200 shrink-0" />
-              )}
+              {mode === m.id && <Check size={14} className="mt-0.5 shrink-0" />}
             </button>
           ))}
         </div>
@@ -350,10 +267,7 @@ const IMAGE_KEYWORDS = [
   'image', 'photo', 'picture', 'draw', 'generate image', 'create image',
   'banao image', 'tasveer', 'wallpaper', 'poster', 'illustration', 'banao', 'bana do',
 ];
-const EDIT_KEYWORDS = [
-  'edit', 'improve', 'enhance', 'better', 'fix', 'accha', 'acha',
-  'sudhar', 'badal', 'hd', 'quality', 'clear', 'sharp',
-];
+const EDIT_KEYWORDS = ['edit', 'improve', 'enhance', 'better', 'fix', 'accha', 'acha', 'sudhar', 'badal', 'hd', 'quality'];
 const SEARCH_KEYWORDS = [
   'search', 'latest', 'news', 'today', 'current', 'price', 'weather', 'score',
   '2025', '2026', 'who won', 'update', 'live',
@@ -379,6 +293,14 @@ function delay(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function emptyAgents() {
+  return {
+    scout: { status: 'waiting', detail: 'Standing by', lines: [] },
+    lab: { status: 'waiting', detail: 'Standing by', lines: [] },
+    writer: { status: 'waiting', detail: 'Standing by', lines: [] },
+  };
+}
+
 export default function ChatWindow({ mode, setMode, sessionId, messages, setMessages, isGuest }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -392,13 +314,10 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
   const [parsingFile, setParsingFile] = useState(false);
   const [fileError, setFileError] = useState('');
   const [lightbox, setLightbox] = useState(null);
-  const [showAgents, setShowAgents] = useState(false);
 
-  const [agents, setAgents] = useState({
-    scout: { status: 'idle', detail: '' },
-    lab: { status: 'idle', detail: '' },
-    writer: { status: 'idle', detail: '' },
-  });
+  // Live agents for the CURRENT reply only (rendered under that turn)
+  const [liveAgents, setLiveAgents] = useState(null);
+  const [showLiveAgents, setShowLiveAgents] = useState(false);
   const [activeSources, setActiveSources] = useState(null);
   const [activeArtifact, setActiveArtifact] = useState(null);
 
@@ -432,7 +351,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
       c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' });
       shouldScrollRef.current = false;
     }
-  }, [messages, agents, imgLoading, isEmpty]);
+  }, [messages, liveAgents, imgLoading, isEmpty]);
 
   useEffect(() => {
     const h = (e) => {
@@ -460,20 +379,21 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     recognitionRef.current = r;
   }, []);
 
-  const setAgent = (id, patch) => {
-    setAgents((prev) => ({
-      ...prev,
-      [id]: { ...prev[id], ...patch },
-    }));
-  };
-
-  /** Show all 3 at once: waiting → running → done */
-  const startAllAgentsWaiting = () => {
-    setShowAgents(true);
-    setAgents({
-      scout: { status: 'waiting', detail: 'Queued…' },
-      lab: { status: 'waiting', detail: 'Queued…' },
-      writer: { status: 'waiting', detail: 'Queued…' },
+  const patchAgent = (id, patch) => {
+    setLiveAgents((prev) => {
+      const base = prev || emptyAgents();
+      const cur = base[id] || { status: 'waiting', detail: '', lines: [] };
+      const lines = patch.line
+        ? [...(cur.lines || []), patch.line].slice(-5)
+        : cur.lines || [];
+      return {
+        ...base,
+        [id]: {
+          ...cur,
+          ...patch,
+          lines,
+        },
+      };
     });
   };
 
@@ -539,10 +459,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     if (imageLeft <= 0 && !photo) {
       setMessages((prev) =>
         prev.concat([
-          {
-            role: 'assistant',
-            content: `Aaj ki image limit khatam (${imageLimit}/day). Kal try karo.`,
-          },
+          { role: 'assistant', content: `Aaj ki image limit khatam (${imageLimit}/day). Kal try karo.` },
         ])
       );
       return;
@@ -550,17 +467,23 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
 
     const prompt = (promptText || '').trim();
     if ((!prompt && !photo) || imgLoading) return;
+
     setImgLoading(true);
     setForceImageGen(false);
-    setShowAgents(false);
+    setShowLiveAgents(false);
     lastImageJob.current = { prompt, photo: photo || null };
     shouldScrollRef.current = true;
+
     const userLabel = photo
       ? prompt
         ? 'Edit photo: "' + prompt + '"'
         : 'Improve this photo'
       : 'Generate image: "' + prompt + '"';
     setMessages((prev) => prev.concat([{ role: 'user', content: userLabel }]));
+
+    const started = Date.now();
+    const MIN_MS = 16000; // 15–20 sec feel
+
     try {
       const token = localStorage.getItem('setrxai_token');
       const body = { prompt: prompt || 'high quality, sharp, natural photo' };
@@ -580,6 +503,10 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
+
+      const elapsed = Date.now() - started;
+      if (elapsed < MIN_MS) await delay(MIN_MS - elapsed);
+
       shouldScrollRef.current = true;
       setMessages((prev) =>
         prev.concat([
@@ -591,6 +518,8 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
       );
       refreshUsage();
     } catch (err) {
+      const elapsed = Date.now() - started;
+      if (elapsed < 4000) await delay(4000 - elapsed);
       setMessages((prev) =>
         prev.concat([{ role: 'assistant', content: 'Image failed: ' + err.message }])
       );
@@ -613,7 +542,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
           },
         ]);
         setForceImageGen(true);
-        if (textareaRef.current) textareaRef.current.focus();
+        textareaRef.current?.focus();
       };
       reader.readAsDataURL(blob);
     } catch (e) {
@@ -654,8 +583,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     const queryText = input.trim() || displayText;
     const doSearch = needsSearch(queryText, mode);
     const wantLab =
-      mode === 'coding' ||
-      /code|html|react|component|experiment|test|debug/i.test(queryText);
+      mode === 'coding' || /code|html|react|component|experiment|test|debug/i.test(queryText);
 
     setInput('');
     setImagePreviews([]);
@@ -665,57 +593,114 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     setWaitingFirstChunk(true);
     setActiveSources(null);
     setActiveArtifact(null);
-    startAllAgentsWaiting(); // ← all 3 visible immediately
-    setMessages((prev) => prev.concat([{ role: 'assistant', content: '' }]));
 
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
+    // Start live agents for THIS reply (shown under user msg / above answer)
+    setLiveAgents(emptyAgents());
+    setShowLiveAgents(true);
+    setMessages((prev) => prev.concat([{ role: 'assistant', content: '', agentsSnapshot: null }]));
+
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     try {
       let scoutResult = null;
       let labHtml = null;
 
-      // Scout
+      // ——— SCOUT (detailed) ———
       if (doSearch) {
-        setAgent('scout', { status: 'running', detail: 'Searching the web…' });
-        await delay(600);
-        setAgent('scout', { status: 'running', detail: 'Choosing best sources…' });
-        await delay(450);
-        setAgent('scout', { status: 'done', detail: 'Sources ready' });
+        patchAgent('scout', {
+          status: 'running',
+          detail: 'Reading your question for search intent',
+          line: 'Detecting if live web data is required…',
+        });
+        await delay(500);
+        patchAgent('scout', {
+          detail: 'Querying the web',
+          line: 'Sending search for: “' + queryText.slice(0, 48) + (queryText.length > 48 ? '…”' : '”'),
+        });
+        await delay(700);
+        patchAgent('scout', {
+          detail: 'Ranking sources by trust & freshness',
+          line: 'Filtering low-quality pages and duplicates…',
+        });
+        await delay(550);
+        patchAgent('scout', {
+          status: 'done',
+          detail: 'Sources locked in',
+          line: 'Kept top reliable links for Writer',
+        });
         scoutResult = {
           sources: [
             {
               title: 'Reference source',
               url: 'https://en.wikipedia.org/wiki/Main_Page',
-              snippet: 'Demo source until backend search is live.',
+              snippet: 'Demo grounding link until backend search is live.',
             },
           ],
-          checks: [{ note: 'Search only when needed' }],
+          checks: [{ note: 'Search ran only because query needed fresh info' }],
         };
         setActiveSources(scoutResult);
       } else {
-        setAgent('scout', { status: 'done', detail: 'No search needed' });
+        patchAgent('scout', {
+          status: 'running',
+          detail: 'Checking if web search is needed',
+          line: 'Scanning message for time-sensitive or factual lookups…',
+        });
+        await delay(400);
+        patchAgent('scout', {
+          status: 'done',
+          detail: 'No live search required',
+          line: 'Answer can be written from model knowledge safely',
+        });
       }
 
-      // Lab
+      // ——— LAB (detailed) ———
       if (wantLab) {
-        setAgent('lab', { status: 'running', detail: 'Running experiment…' });
-        await delay(550);
-        setAgent('lab', { status: 'running', detail: 'Verifying…' });
-        await delay(400);
-        setAgent('lab', { status: 'done', detail: 'Experiment done' });
+        patchAgent('lab', {
+          status: 'running',
+          detail: 'Opening experiment workspace',
+          line: 'Preparing a small test for coding / logic…',
+        });
+        await delay(500);
+        patchAgent('lab', {
+          detail: 'Running checks',
+          line: 'Validating structure, edge cases, and obvious bugs…',
+        });
+        await delay(600);
+        patchAgent('lab', {
+          status: 'done',
+          detail: 'Experiment finished',
+          line: 'Notes passed to Writer for the final answer',
+        });
         labHtml = `<h2 style="margin:0 0 8px">Lab</h2>
-<p style="margin:0 0 12px;color:#555">Quick check for your request.</p>
-<pre style="background:#111;color:#e5e5e5;padding:12px;border-radius:10px;overflow:auto;font-size:13px">// ok
-function check() { return true; }</pre>`;
+<p style="margin:0 0 12px;color:#555">Quick verification for your request.</p>
+<pre style="background:#111;color:#e5e5e5;padding:12px;border-radius:10px;overflow:auto;font-size:13px">// checked
+function ok() { return true; }</pre>`;
         setActiveArtifact(labHtml);
       } else {
-        setAgent('lab', { status: 'done', detail: 'Skipped' });
+        patchAgent('lab', {
+          status: 'running',
+          detail: 'Seeing if an experiment helps',
+          line: 'No code/test sandbox needed for this question…',
+        });
+        await delay(350);
+        patchAgent('lab', {
+          status: 'done',
+          detail: 'Skipped experiment',
+          line: 'Straight to Writer for a clean answer',
+        });
       }
 
-      // Writer
-      setAgent('writer', { status: 'running', detail: 'Writing answer…' });
+      // ——— WRITER (detailed) ———
+      patchAgent('writer', {
+        status: 'running',
+        detail: 'Planning the answer',
+        line: 'Combining Scout notes + Lab results (if any)…',
+      });
+      await delay(400);
+      patchAgent('writer', {
+        detail: 'Writing clearly',
+        line: 'Drafting step-by-step, accurate response…',
+      });
 
       const response = await api.chatStream(
         mode,
@@ -747,20 +732,16 @@ function check() { return true; }</pre>`;
           try {
             const parsed = JSON.parse(jsonStr);
 
-            if (parsed.agent?.id) {
-              setAgent(parsed.agent.id, {
-                status: parsed.agent.status || 'running',
-                detail: parsed.agent.detail || '',
+            if (parsed.chunk || parsed.replace) {
+              setWaitingFirstChunk(false);
+              patchAgent('writer', {
+                status: 'running',
+                detail: 'Streaming final answer',
+                line: 'Refining wording and structure…',
               });
             }
-            if (parsed.sources) {
-              setActiveSources({ sources: parsed.sources, checks: parsed.checks || [] });
-            }
-            if (parsed.artifactHtml) setActiveArtifact(parsed.artifactHtml);
 
             if (parsed.replace) {
-              setWaitingFirstChunk(false);
-              setAgent('writer', { status: 'done', detail: 'Answer ready' });
               setMessages((prev) => {
                 const u = prev.slice();
                 u[u.length - 1] = {
@@ -775,8 +756,6 @@ function check() { return true; }</pre>`;
             }
 
             if (parsed.chunk) {
-              setWaitingFirstChunk(false);
-              setAgent('writer', { status: 'running', detail: 'Writing…' });
               setMessages((prev) => {
                 const u = prev.slice();
                 const last = u[u.length - 1];
@@ -793,13 +772,9 @@ function check() { return true; }</pre>`;
 
             if (parsed.error) {
               setWaitingFirstChunk(false);
-              setAgent('writer', { status: 'done', detail: 'Error' });
               setMessages((prev) => {
                 const u = prev.slice();
-                u[u.length - 1] = {
-                  role: 'assistant',
-                  content: 'Error: ' + parsed.error,
-                };
+                u[u.length - 1] = { role: 'assistant', content: 'Error: ' + parsed.error };
                 return u;
               });
             }
@@ -807,10 +782,18 @@ function check() { return true; }</pre>`;
         }
       }
 
-      setAgent('writer', { status: 'done', detail: 'Answer ready' });
+      patchAgent('writer', {
+        status: 'done',
+        detail: 'Answer delivered',
+        line: 'Done — review important facts if needed',
+      });
     } catch (err) {
       setWaitingFirstChunk(false);
-      setAgent('writer', { status: 'done', detail: 'Failed' });
+      patchAgent('writer', {
+        status: 'done',
+        detail: 'Could not finish',
+        line: 'Connection problem — try again',
+      });
       setMessages((prev) => {
         const u = prev.slice();
         u[u.length - 1] = {
@@ -822,8 +805,7 @@ function check() { return true; }</pre>`;
     } finally {
       setLoading(false);
       setWaitingFirstChunk(false);
-      // agents board thodi der dikhe, phir soft hide
-      setTimeout(() => setShowAgents(false), 2200);
+      setTimeout(() => setShowLiveAgents(false), 1800);
     }
   };
 
@@ -853,11 +835,7 @@ function check() { return true; }</pre>`;
         <div className="flex flex-wrap gap-2 mb-3 px-1">
           {imagePreviews.map((p, idx) => (
             <div key={idx} className="relative">
-              <img
-                src={p.previewUrl}
-                alt=""
-                className="h-16 w-16 object-cover rounded-xl border border-zinc-200 dark:border-white/10"
-              />
+              <img src={p.previewUrl} alt="" className="h-16 w-16 object-cover rounded-xl border border-zinc-200 dark:border-white/10" />
               <button
                 type="button"
                 onClick={() => setImagePreviews((prev) => prev.filter((_, j) => j !== idx))}
@@ -867,7 +845,6 @@ function check() { return true; }</pre>`;
               </button>
             </div>
           ))}
-          <span className="text-[11px] text-zinc-400 self-end pb-1">{imagePreviews.length}/4</span>
         </div>
       )}
 
@@ -875,9 +852,9 @@ function check() { return true; }</pre>`;
       {attachedFile && !parsingFile && (
         <div className="flex items-center gap-2 mb-2 text-xs bg-zinc-100 dark:bg-zinc-800/80 rounded-xl px-3 py-2 border border-zinc-200 dark:border-white/10">
           <FileText size={14} className="text-zinc-500 shrink-0" />
-          <span className="truncate flex-1 text-zinc-700 dark:text-zinc-200">{attachedFile.name}</span>
-          <button type="button" onClick={() => setAttachedFile(null)} className="p-0.5">
-            <X size={14} className="text-zinc-500" />
+          <span className="truncate flex-1">{attachedFile.name}</span>
+          <button type="button" onClick={() => setAttachedFile(null)}>
+            <X size={14} />
           </button>
         </div>
       )}
@@ -900,57 +877,23 @@ function check() { return true; }</pre>`;
             className="w-full resize-none bg-transparent text-[15px] leading-6 text-zinc-900 dark:text-zinc-100 outline-none max-h-[160px] placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
           />
         </div>
-
         <div className="flex items-center gap-1 px-2 pb-2 pt-1 border-t border-zinc-100 dark:border-white/[0.06] relative z-40">
           <input type="file" accept="image/*" multiple ref={fileInputRef} onChange={handleImageSelect} className="hidden" />
-          <input
-            type="file"
-            accept=".pdf,.docx,.txt,.csv,.js,.jsx,.ts,.tsx,.py,.json,.md,.html,.css"
-            ref={docInputRef}
-            onChange={handleDocSelect}
-            className="hidden"
-          />
+          <input type="file" accept=".pdf,.docx,.txt,.csv,.js,.jsx,.ts,.tsx,.py,.json,.md,.html,.css" ref={docInputRef} onChange={handleDocSelect} className="hidden" />
 
           <div className="relative" ref={plusMenuRef}>
-            <button
-              type="button"
-              onClick={() => setShowPlusMenu((v) => !v)}
-              className="h-9 w-9 rounded-full flex items-center justify-center text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
-              aria-label="Attach"
-            >
+            <button type="button" onClick={() => setShowPlusMenu((v) => !v)} className="h-9 w-9 rounded-full flex items-center justify-center text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800" aria-label="Attach">
               <Plus size={20} />
             </button>
             {showPlusMenu && (
               <div className="absolute left-0 bottom-full mb-2 w-48 rounded-2xl border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-900 shadow-xl p-1.5 z-50">
-                <button
-                  type="button"
-                  onClick={() => {
-                    fileInputRef.current?.click();
-                    setShowPlusMenu(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                >
+                <button type="button" onClick={() => { fileInputRef.current?.click(); setShowPlusMenu(false); }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800">
                   <ImageIcon size={16} /> Photo
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    docInputRef.current?.click();
-                    setShowPlusMenu(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                >
+                <button type="button" onClick={() => { docInputRef.current?.click(); setShowPlusMenu(false); }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800">
                   <FileText size={16} /> File
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForceImageGen(true);
-                    setShowPlusMenu(false);
-                    textareaRef.current?.focus();
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                >
+                <button type="button" onClick={() => { setForceImageGen(true); setShowPlusMenu(false); textareaRef.current?.focus(); }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800">
                   <Wand2 size={16} /> Generate image
                 </button>
               </div>
@@ -962,12 +905,7 @@ function check() { return true; }</pre>`;
           <button
             type="button"
             onClick={toggleListening}
-            className={
-              'h-9 w-9 rounded-full flex items-center justify-center transition ' +
-              (isListening
-                ? 'bg-red-500/15 text-red-500'
-                : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800')
-            }
+            className={'h-9 w-9 rounded-full flex items-center justify-center ' + (isListening ? 'bg-red-500/15 text-red-500' : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800')}
             aria-label="Voice"
           >
             <Mic size={18} />
@@ -1000,13 +938,18 @@ function check() { return true; }</pre>`;
     </div>
   );
 
+  // Find index of last user message — agents + image panel render after it
+  const lastUserIdx = (() => {
+    for (let i = displayMessages.length - 1; i >= 0; i--) {
+      if (displayMessages[i].role === 'user') return i;
+    }
+    return -1;
+  })();
+
   return (
     <div className="flex flex-col h-full min-h-0 bg-zinc-50 dark:bg-[#0c0c0f]">
       {lightbox && (
-        <div
-          className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setLightbox(null)}
-        >
+        <div className="fixed inset-0 z-[80] bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
           <img src={lightbox} alt="" className="max-w-full max-h-full rounded-lg object-contain" />
         </div>
       )}
@@ -1022,25 +965,16 @@ function check() { return true; }</pre>`;
             <div className="max-w-2xl mx-auto w-full px-3 sm:px-4 py-6">
               <ImageLimitPill remaining={imageLeft} limit={imageLimit} />
 
-              {/* 3 agents — always all three when pipeline runs */}
-              <AgentsLive agents={agents} visible={showAgents || loading} />
-
-              {/* Big image-gen box in chat history area */}
-              <ImageGenPanel loading={imgLoading} />
-
               {displayMessages.map((msg, i) => {
-                if (msg.role === 'user' && msg.previewUrls && msg.previewUrls.length) {
-                  return (
-                    <div key={i} className="flex justify-end mb-5">
+                const nodes = [];
+
+                if (msg.role === 'user' && msg.previewUrls?.length) {
+                  nodes.push(
+                    <div key={'u-img-' + i} className="flex justify-end mb-3">
                       <div className="max-w-[85%] flex flex-col items-end gap-2">
                         <div className="flex flex-wrap gap-1.5 justify-end">
                           {msg.previewUrls.map((url, j) => (
-                            <img
-                              key={j}
-                              src={url}
-                              alt=""
-                              className="h-24 w-24 object-cover rounded-xl border border-zinc-200 dark:border-white/10"
-                            />
+                            <img key={j} src={url} alt="" className="h-24 w-24 object-cover rounded-xl border border-zinc-200 dark:border-white/10" />
                           ))}
                         </div>
                         {msg.content && msg.content !== 'Photo' && (
@@ -1051,42 +985,43 @@ function check() { return true; }</pre>`;
                       </div>
                     </div>
                   );
+                } else if (msg.role === 'user') {
+                  nodes.push(
+                    <div key={'u-' + i} className="flex justify-end mb-3">
+                      <div className="rounded-2xl rounded-br-md px-4 py-2.5 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 text-[15px] leading-relaxed max-w-[85%]">
+                        {msg.content}
+                      </div>
+                    </div>
+                  );
                 }
 
-                if (
-                  msg.role === 'assistant' &&
-                  msg.content &&
-                  msg.content.indexOf('__IMAGE__') === 0
-                ) {
+                // After THIS user message → show agents / image panel for current turn
+                if (msg.role === 'user' && i === lastUserIdx) {
+                  if (showLiveAgents || loading) {
+                    nodes.push(
+                      <AgentThoughts key="live-agents" agents={liveAgents} show={true} />
+                    );
+                  }
+                  if (imgLoading) {
+                    nodes.push(<ImageGenPanel key="img-panel" loading={true} />);
+                  }
+                }
+
+                if (msg.role === 'assistant' && msg.content?.indexOf('__IMAGE__') === 0) {
                   const rest = msg.content.replace('__IMAGE__', '');
                   const splitAt = rest.indexOf('__PROMPT__');
                   const imgUrl = splitAt >= 0 ? rest.slice(0, splitAt) : rest;
                   const imgPrompt = splitAt >= 0 ? rest.slice(splitAt + 10) : '';
-                  return (
-                    <div key={i} className="mb-6">
+                  nodes.push(
+                    <div key={'img-' + i} className="mb-6">
                       <span className="text-xs text-zinc-500 mb-2 block">SetrxAI</span>
-                      <button
-                        type="button"
-                        className="rounded-2xl overflow-hidden border border-zinc-200 dark:border-white/10 max-w-sm shadow-sm"
-                        onClick={() => setLightbox(imgUrl)}
-                      >
-                        <img
-                          src={imgUrl}
-                          alt={imgPrompt}
-                          className="w-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
+                      <button type="button" className="rounded-2xl overflow-hidden border border-zinc-200 dark:border-white/10 max-w-sm shadow-sm" onClick={() => setLightbox(imgUrl)}>
+                        <img src={imgUrl} alt={imgPrompt} className="w-full object-cover" referrerPolicy="no-referrer" />
                       </button>
-                      {imgPrompt ? (
-                        <p className="text-xs text-zinc-500 mt-1.5">&quot;{imgPrompt}&quot;</p>
-                      ) : null}
+                      {imgPrompt ? <p className="text-xs text-zinc-500 mt-1.5">&quot;{imgPrompt}&quot;</p> : null}
                       <div className="flex gap-3 mt-2 text-xs text-zinc-500">
-                        <a href={imgUrl} target="_blank" rel="noreferrer" className="hover:underline">
-                          Download
-                        </a>
-                        <button type="button" className="hover:underline" onClick={() => useImageForEdit(imgUrl)}>
-                          Edit
-                        </button>
+                        <a href={imgUrl} target="_blank" rel="noreferrer" className="hover:underline">Download</a>
+                        <button type="button" className="hover:underline" onClick={() => useImageForEdit(imgUrl)}>Edit</button>
                         <button
                           type="button"
                           className="hover:underline"
@@ -1101,12 +1036,10 @@ function check() { return true; }</pre>`;
                       </div>
                     </div>
                   );
-                }
-
-                if (msg.role === 'assistant') {
-                  return (
-                    <div key={i} className="mb-6">
-                      <Message role={msg.role} content={msg.content} />
+                } else if (msg.role === 'assistant' && msg.content) {
+                  nodes.push(
+                    <div key={'a-' + i} className="mb-6">
+                      <Message role="assistant" content={msg.content} />
                       {(msg.sources || (i === displayMessages.length - 1 && activeSources)) && (
                         <SourcesList
                           sources={msg.sources || activeSources?.sources}
@@ -1120,7 +1053,7 @@ function check() { return true; }</pre>`;
                   );
                 }
 
-                return <Message key={i} role={msg.role} content={msg.content} />;
+                return nodes;
               })}
             </div>
           </div>
