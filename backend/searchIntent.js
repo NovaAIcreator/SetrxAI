@@ -1,56 +1,37 @@
-// searchIntent.js
-// Study/chapter queries + live/current queries — dono pe search trigger hoti hai,
-// taaki AI apni purani training memory ki jagah fresh, current content use kare.
+// replace searchWeb with richer return (keep detectSearchIntent optional/legacy)
 
 const axios = require('axios');
 
-const SEARCH_INTENT_KEYWORDS = [
-  // Live/current info
-  'current pm', 'current president', 'current ceo', 'current cm', 'abhi ke pm',
-  'abhi kaun hai', 'who is the current', 'kaun hai abhi', 'right now',
-  'live score', 'match score', 'aaj ka match', 'today\'s match', 'live match',
-  'latest news', 'aaj ki news', 'breaking news', 'today\'s news', 'kal ki news',
-  'weather today', 'aaj ka mausam', 'mausam kaisa', 'today\'s weather',
-  'stock price', 'share price', 'exchange rate', 'aaj ka rate', 'today\'s price',
-  'petrol price', 'gold price', 'aaj ka gold rate',
-  'this year', 'is saal', '2026 mein kya', 'abhi 2026', 'currently happening',
-  'ho raha hai abhi', 'abhi chal raha hai', 'election result', 'election winner',
-
-  // Study/chapter/notes — taaki current syllabus/chapter content mile, purani training memory na use ho
-  'chapter', 'class ', 'notes', 'syllabus', 'ncert', 'previous year paper',
-  'question paper', 'exam', 'important questions', 'summary', 'revision',
-  'batao', 'samjhao', 'explain',
-];
-
-async function detectSearchIntent(text) {
-  if (!text) return false;
-  const lower = text.toLowerCase();
-  return SEARCH_INTENT_KEYWORDS.some((k) => lower.includes(k));
-}
-
 async function searchWeb(query) {
   const apiKey = process.env.TAVILY_API_KEY;
-  if (!apiKey) throw new Error('TAVILY_API_KEY set nahi hai — search skip ho rahi hai');
+  if (!apiKey) throw new Error('TAVILY_API_KEY missing');
 
   const response = await axios.post(
     'https://api.tavily.com/search',
     {
       api_key: apiKey,
       query,
-      max_results: 4,
-      search_depth: 'basic',
+      max_results: 5,
+      search_depth: 'advanced',
+      include_answer: false,
     },
-    { timeout: 15000 }
+    { timeout: 20000 }
   );
 
   const results = response.data?.results || [];
-  if (results.length === 0) return null;
+  if (!results.length) return null;
 
-  const formatted = results
-    .map((r, i) => `[${i + 1}] ${r.title}: ${r.content?.slice(0, 300) || ''}`)
+  const sources = results.map((r) => ({
+    title: r.title || 'Source',
+    url: r.url || '',
+    snippet: (r.content || '').slice(0, 220),
+  }));
+
+  const context = sources
+    .map((s, i) => `[${i + 1}] \( {s.title}\n \){s.url}\n${s.snippet}`)
     .join('\n\n');
 
-  return formatted;
+  return { sources, context };
 }
 
-module.exports = { detectSearchIntent, searchWeb };
+module.exports = { searchWeb };
