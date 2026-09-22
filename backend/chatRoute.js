@@ -5,11 +5,11 @@ const KeyManager = require('./keyManager');
 const { callGroq } = require('./groq');
 const { callGemini } = require('./gemini');
 const { callOpenRouter } = require('./openrouter');
-const { searchWeb } = require('./searchIntent');
 const modePrompts = require('./prompts');
 const authMiddleware = require('./authMiddleware');
 const pool = require('./db');
 const { think, verifyAnswer } = require('./brain');
+const { planAgents, runScout, runLab } = require('./agents');
 
 function collectKeys(prefix) {
   const arr = [];
@@ -135,6 +135,14 @@ function optionalAuth(req, res, next) {
   next();
 }
 
+function sse(res, obj) {
+  res.write('data: ' + JSON.stringify(obj) + '\n\n');
+}
+
+function emitAgent(res, id, status, detail, logLine) {
+  sse(res, { agent: { id, status, detail, logLine } });
+}
+
 router.post('/chat', optionalAuth, async (req, res) => {
   const { mode, messages, sessionId, image, images, file } = req.body;
 
@@ -188,6 +196,7 @@ router.post('/chat', optionalAuth, async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
+  // Provider routing (vision / model pick) — keep existing brain
   const decision = await think({
     userText,
     hasImage: !!(allImages && allImages.length),
@@ -195,41 +204,85 @@ router.post('/chat', optionalAuth, async (req, res) => {
     mode,
   });
 
-  res.write(
-    'data: ' +
-      JSON.stringify({ thinking: decision.thought || 'Thinking through this' }) +
-      '\n\n'
+  // Multi-agent plan (LLM meaning — any wording)
+  const plan = await planAgents({
+    userText,
+    mode,
+    hasFile: !!file,
+    fileName: file?.name || null,
+    hasImage: !!(allImages && allImages.length),
+  });
+
+  // ── Scout ──
+  if (file?.name) {
+    emitAgent(res, 'scout', 'running', 'File', 'Reading: ' + file.name);
+  }
+
+  let scoutPack = { sources: [], context: '', checks: [] };
+
+  if (plan.scout) {
+    const thoughts = plan.scoutThoughts || ['Searching'];
+    emitAgent(res, 'scout', 'running', 'Search', thoughts[0] || 'Search');
+    for (let i = 1; i < thoughts.length; i++) {
+      emitAgent(res, 'scout', 'running', 'Search', thoughts[i]);
+    }
+    scoutPack = await runScout({
+      searchQuery: plan.searchQuery || userText,
+      userText,
+      onProgress: ({ detail, line }) => emitAgent(res, 'scout', 'running', detail, line),
+    });
+    emitAgent(res, 'scout', 'done', 'Sources ready', 'Context for Writer');
+    if (scoutPack.sources?.length) {
+      sse(res, { sources: scoutPack.sources, checks: scoutPack.checks || [] });
+    }
+  } else {
+    emitAgent(
+      res,
+      'scout',
+      'done',
+      'Search off',
+      (plan.scoutThoughts && plan.scoutThoughts[0]) || 'No web needed'
+    );
+  }
+
+  // ── Lab ──
+  let labNotes = '';
+  if (plan.lab) {
+    const thoughts = plan.labThoughts || ['Experiment'];
+    emitAgent(res, 'lab', 'running', 'Lab', thoughts[0] || 'Lab');
+    for (let i = 1; i < thoughts.length; i++) {
+      emitAgent(res, 'lab', 'running', 'Lab', thoughts[i]);
+    }
+    const labPack = await runLab({
+      userText,
+      labGoal: plan.labGoal,
+      mode,
+      scoutContext: scoutPack.context,
+      onProgress: ({ detail, line }) => emitAgent(res, 'lab', 'running', detail, line),
+    });
+    labNotes = labPack.notes || '';
+    emitAgent(res, 'lab', 'done', 'Lab done', 'Notes ready');
+  } else {
+    emitAgent(
+      res,
+      'lab',
+      'done',
+      'Lab idle',
+      (plan.labThoughts && plan.labThoughts[0]) || 'No experiment'
+    );
+  }
+
+  // ── Writer prep ──
+  emitAgent(
+    res,
+    'writer',
+    'running',
+    'Writing',
+    (plan.writerThoughts && plan.writerThoughts[0]) || 'Drafting'
   );
 
-  let searchContext = null;
-  if (decision.search) {
-    res.write(
-      'data: ' + JSON.stringify({ thinking: 'Searching the web for current info' }) + '\n\n'
-    );
-    try {
-      searchContext = await searchWeb(userText);
-      if (searchContext) {
-        res.write(
-          'data: ' + JSON.stringify({ thinking: 'Reading search results' }) + '\n\n'
-        );
-      }
-    } catch (err) {
-      console.warn('Search fail:', err.message);
-    }
-  }
-
-  if (file) {
-    res.write(
-      'data: ' +
-        JSON.stringify({ thinking: 'Reading attached file: ' + (file.name || 'document') }) +
-        '\n\n'
-    );
-  }
-
   if (allImages && allImages.length) {
-    res.write(
-      'data: ' + JSON.stringify({ thinking: 'Looking at the attached photo' }) + '\n\n'
-    );
+    sse(res, { thinking: 'Looking at the attached photo' });
   }
 
   const currentDate = new Date().toLocaleDateString('en-IN', {
@@ -238,7 +291,12 @@ router.post('/chat', optionalAuth, async (req, res) => {
     day: 'numeric',
   });
   const dateNote = "\n\nToday's date: " + currentDate + '.';
-  const searchNote = searchContext ? '\n\nLive web search results:\n' + searchContext : '';
+  const searchNote = scoutPack.context
+    ? '\n\nLive web search results:\n' + scoutPack.context
+    : '';
+  const labNote = labNotes
+    ? '\n\nLab agent notes (use carefully; no false claims):\n' + labNotes
+    : '';
   const fileNote = file ? '\n\nUser attached file "' + file.name + '":\n' + file.text : '';
   const langNote =
     lang === 'hinglish'
@@ -246,7 +304,7 @@ router.post('/chat', optionalAuth, async (req, res) => {
       : lang === 'hindi'
         ? '\n\nUser language detected: Hindi Devanagari. Reply in Hindi.'
         : '\n\nUser language detected: English. Reply in English.';
-  const extra = dateNote + searchNote + fileNote + langNote;
+  const extra = dateNote + searchNote + labNote + fileNote + langNote;
   const finalSystemPrompt = modePrompts.buildSystemPrompt
     ? modePrompts.buildSystemPrompt(mode, extra, userText)
     : modePrompts[mode] + extra;
@@ -276,32 +334,24 @@ router.post('/chat', optionalAuth, async (req, res) => {
     let providerSucceeded = false;
 
     for (let attempt = 0; attempt < totalKeys; attempt++) {
-      if (manager.allKeysOnCooldown()) break;
+      if (manager.allKeysOnCooldown && manager.allKeysOnCooldown()) break;
       const keyEntry = manager.getAvailableKey();
       if (!keyEntry) break;
 
       const budget = (PROVIDER_TOKEN_BUDGET[providerName] || 6800) - systemTokens;
       const trimmedHistory = trimHistoryForBudget(cleanMessages, budget);
-      const providerMessages = [{ role: 'system', content: finalSystemPrompt }, ...trimmedHistory];
+      const providerMessages = [
+        { role: 'system', content: finalSystemPrompt },
+        ...trimmedHistory,
+      ];
 
-      res.write(
-        'data: ' +
-          JSON.stringify({
-            thinking:
-              mode === 'coding'
-                ? 'Writing the code carefully'
-                : mode === 'study'
-                  ? 'Structuring the explanation'
-                  : 'Writing the answer',
-          }) +
-          '\n\n'
-      );
+      emitAgent(res, 'writer', 'running', 'Streaming', 'Sending answer');
 
       try {
         const { content } = await providerCallers[providerName](
           keyEntry.key,
           providerMessages,
-          (chunk) => res.write('data: ' + JSON.stringify({ chunk }) + '\n\n'),
+          (chunk) => sse(res, { chunk }),
           allImages,
           genOptions
         );
@@ -311,16 +361,12 @@ router.post('/chat', optionalAuth, async (req, res) => {
         const shouldVerify =
           mode === 'coding' && content && content.length > 80 && wantsLongForm(userText);
         if (shouldVerify) {
-          res.write(
-            'data: ' +
-              JSON.stringify({ thinking: 'Checking the answer for mistakes' }) +
-              '\n\n'
-          );
+          sse(res, { thinking: 'Checking the answer for mistakes' });
           try {
             const v = await verifyAnswer(userText, content, mode);
             if (!v.ok && v.fixed) {
               finalContent = v.fixed;
-              res.write('data: ' + JSON.stringify({ replace: finalContent }) + '\n\n');
+              sse(res, { replace: finalContent });
             }
           } catch (e) {
             console.warn('Verify skip:', e.message);
@@ -334,7 +380,8 @@ router.post('/chat', optionalAuth, async (req, res) => {
           );
         }
 
-        res.write('data: ' + JSON.stringify({ done: true, provider: providerName }) + '\n\n');
+        emitAgent(res, 'writer', 'done', 'Done', 'Answer delivered');
+        sse(res, { done: true, provider: providerName });
         res.end();
         succeeded = true;
         providerSucceeded = true;
@@ -353,13 +400,10 @@ router.post('/chat', optionalAuth, async (req, res) => {
   }
 
   if (!succeeded) {
-    res.write(
-      'data: ' +
-        JSON.stringify({
-          error: 'All AI providers are unavailable right now. Please try again in a moment.',
-        }) +
-        '\n\n'
-    );
+    emitAgent(res, 'writer', 'done', 'Failed', 'All providers down');
+    sse(res, {
+      error: 'All AI providers are unavailable right now. Please try again in a moment.',
+    });
     res.end();
   }
 });
