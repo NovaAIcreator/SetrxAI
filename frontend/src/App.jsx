@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SEOHead from './components/SEOHead';
-
 import ModeSelector from './components/ModeSelector';
 import ChatWindow from './components/ChatWindow';
 import Sidebar from './components/Sidebar';
@@ -28,9 +27,9 @@ export default function App({ defaultMode = 'general' }) {
   const [showProfile, setShowProfile] = useState(false);
 
   const [mode, setMode] = useState(defaultMode);
-
-  // Default theme = light (white). User can change later in Profile.
-  const [theme, setTheme] = useState(() => localStorage.getItem('setrxai_theme') || 'light');
+  const [theme, setTheme] = useState(function () {
+    return localStorage.getItem('setrxai_theme') || 'light';
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [sessions, setSessions] = useState([]);
@@ -38,16 +37,19 @@ export default function App({ defaultMode = 'general' }) {
   const [activeId, setActiveId] = useState(null);
   const [messages, setMessages] = useState([]);
 
-  useEffect(() => {
+  useEffect(function () {
     document.documentElement.classList.toggle('dark', theme === 'dark');
     localStorage.setItem('setrxai_theme', theme);
   }, [theme]);
 
-  useEffect(() => {
-    navigate(`/${mode}`, { replace: true });
-  }, [mode]);
+  useEffect(
+    function () {
+      navigate('/' + mode, { replace: true });
+    },
+    [mode]
+  );
 
-  useEffect(() => {
+  useEffect(function () {
     const token = getToken();
     if (!token) {
       startGuestSession();
@@ -59,29 +61,29 @@ export default function App({ defaultMode = 'general' }) {
     if (cachedUser) {
       try {
         setUser(JSON.parse(cachedUser));
-      } catch (e) {
-        /* corrupt cache */
-      }
+      } catch (e) {}
     }
     setCheckingAuth(false);
 
     api
       .getMe()
-      .then(({ user }) => {
-        setUser(user);
-        localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
-        loadEverything();
+      .then(function (res) {
+        setUser(res.user);
+        localStorage.setItem(USER_CACHE_KEY, JSON.stringify(res.user));
+        return loadEverything();
       })
-      .catch((err) => {
+      .catch(function (err) {
         if (err.status === 401) {
           localStorage.removeItem('setrxai_token');
           localStorage.removeItem(USER_CACHE_KEY);
           setUser(null);
           startGuestSession();
         } else {
-          console.warn('Auth verify failed, keeping cached login:', err.message);
+          console.warn('Auth verify failed:', err.message);
           if (cachedUser) {
-            loadEverything().catch(() => startGuestSession());
+            loadEverything().catch(function () {
+              startGuestSession();
+            });
           } else {
             startGuestSession();
           }
@@ -89,14 +91,14 @@ export default function App({ defaultMode = 'general' }) {
       });
   }, []);
 
-  const startGuestSession = () => {
+  function startGuestSession() {
     setSessions([]);
     setProjects([]);
     setActiveId('guest');
     setMessages([]);
-  };
+  }
 
-  const loadEverything = async () => {
+  async function loadEverything() {
     let sessionsData = [];
     let projectsData = [];
 
@@ -112,58 +114,69 @@ export default function App({ defaultMode = 'general' }) {
       console.warn('Projects load failed:', err.message);
     }
 
-    setSessions(sessionsData);
     setProjects(projectsData);
 
-    if (sessionsData.length > 0) {
-      selectSession(sessionsData[0].id, sessionsData[0].mode);
-    } else if (activeId === 'guest' || !activeId) {
-      createNewSession();
+    // Always open a NEW blank chat (old chats stay in sidebar)
+    try {
+      const newSession = await api.createSession(mode, null);
+      const rest = sessionsData.filter(function (s) {
+        return s.id !== newSession.id;
+      });
+      setSessions([newSession].concat(rest));
+      setActiveId(newSession.id);
+      setMessages([]);
+    } catch (err) {
+      console.error('New session on load failed:', err.message);
+      setSessions(sessionsData);
+      setActiveId(null);
+      setMessages([]);
     }
-  };
+  }
 
-  const handleLoginSuccess = async (loggedInUser) => {
+  async function handleLoginSuccess(loggedInUser) {
     setActiveId(null);
     setMessages([]);
     setUser(loggedInUser);
     localStorage.setItem(USER_CACHE_KEY, JSON.stringify(loggedInUser));
     setShowLogin(false);
     await loadEverything();
-  };
+  }
 
-  const handleLogout = () => {
+  function handleLogout() {
     localStorage.removeItem('setrxai_token');
     localStorage.removeItem(USER_CACHE_KEY);
     setUser(null);
     setShowProfile(false);
     startGuestSession();
-  };
+  }
 
-  const handleAccountDeleted = () => {
+  function handleAccountDeleted() {
     localStorage.removeItem('setrxai_token');
     localStorage.removeItem(USER_CACHE_KEY);
     setUser(null);
     setShowProfile(false);
     startGuestSession();
-  };
+  }
 
-  const createNewSession = async (projectId = null) => {
-    if (!user) {
+  async function createNewSession(projectId) {
+    if (!getToken()) {
       startGuestSession();
       return;
     }
     try {
-      const newSession = await api.createSession(mode, projectId);
-      setSessions((prev) => [newSession, ...prev]);
+      const newSession = await api.createSession(mode, projectId || null);
+      setSessions(function (prev) {
+        return [newSession].concat(prev);
+      });
       setActiveId(newSession.id);
       setMessages([]);
       setSidebarOpen(false);
     } catch (err) {
       console.error('New session create failed:', err.message);
     }
-  };
+  }
 
-  const selectSession = async (id, sessionMode) => {
+  async function selectSession(id, sessionMode) {
     setActiveId(id);
     if (sessionMode) setMode(sessionMode);
     try {
@@ -174,56 +187,79 @@ export default function App({ defaultMode = 'general' }) {
       setMessages([]);
     }
     setSidebarOpen(false);
-  };
+  }
 
-  const deleteSession = async (id) => {
+  async function deleteSession(id) {
     try {
       await api.deleteSession(id);
     } catch (err) {
       console.error('Delete session failed:', err.message);
     }
-    setSessions((prev) => prev.filter((s) => s.id !== id));
+    setSessions(function (prev) {
+      return prev.filter(function (s) {
+        return s.id !== id;
+      });
+    });
     if (activeId === id) {
-      const remaining = sessions.filter((s) => s.id !== id);
-      if (remaining.length > 0) selectSession(remaining[0].id, remaining[0].mode);
-      else createNewSession();
+      createNewSession();
     }
-  };
+  }
 
-  const handleNewProject = async (name) => {
+  async function handleNewProject(name) {
     try {
       const newProject = await api.createProject(name);
-      setProjects((prev) => [newProject, ...prev]);
+      setProjects(function (prev) {
+        return [newProject].concat(prev);
+      });
     } catch (err) {
       console.error('Project create failed:', err.message);
       alert('Project banane mein problem hui.');
     }
-  };
+  }
 
-  const handleDeleteProject = async (id) => {
+  async function handleDeleteProject(id) {
     try {
       await api.deleteProject(id);
     } catch (err) {
       console.error('Project delete failed:', err.message);
     }
-    setProjects((prev) => prev.filter((p) => p.id !== id));
-    setSessions((prev) => prev.filter((s) => s.project_id !== id));
-  };
+    setProjects(function (prev) {
+      return prev.filter(function (p) {
+        return p.id !== id;
+      });
+    });
+    setSessions(function (prev) {
+      return prev.filter(function (s) {
+        return s.project_id !== id;
+      });
+    });
+  }
 
-  const handleHome = () => {
+  function handleHome() {
     createNewSession();
-  };
+  }
 
-  useEffect(() => {
-    if (!activeId || activeId === 'guest' || messages.length === 0) return;
-    setSessions((prev) =>
-      prev.map((s) =>
-        s.id === activeId && s.title === 'New Chat' && messages[0]?.content
-          ? { ...s, title: messages[0].content.slice(0, 40) }
-          : s
-      )
-    );
-  }, [messages]);
+  useEffect(
+    function () {
+      if (!activeId || activeId === 'guest' || messages.length === 0) return;
+      setSessions(function (prev) {
+        return prev.map(function (s) {
+          if (
+            s.id === activeId &&
+            s.title === 'New Chat' &&
+            messages[0] &&
+            messages[0].content
+          ) {
+            return Object.assign({}, s, {
+              title: messages[0].content.slice(0, 40),
+            });
+          }
+          return s;
+        });
+      });
+    },
+    [messages]
+  );
 
   if (checkingAuth) {
     return (
@@ -241,19 +277,38 @@ export default function App({ defaultMode = 'general' }) {
         sessions={sessions}
         projects={projects}
         activeId={activeId}
-        onSelect={(id) => selectSession(id, sessions.find((s) => s.id === id)?.mode)}
-        onNew={() => createNewSession()}
+        onSelect={function (id) {
+          const s = sessions.find(function (x) {
+            return x.id === id;
+          });
+          selectSession(id, s && s.mode);
+        }}
+        onNew={function () {
+          createNewSession();
+        }}
         onDelete={deleteSession}
         onNewProject={handleNewProject}
-        onNewChatInProject={(projectId) => createNewSession(projectId)}
+        onNewChatInProject={function (projectId) {
+          createNewSession(projectId);
+        }}
         onDeleteProject={handleDeleteProject}
         onHome={handleHome}
         isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        onOpenAbout={() => setShowAbout(true)}
-        onOpenPrivacy={() => setShowPrivacy(true)}
-        onOpenTerms={() => setShowTerms(true)}
-        onOpenProfile={() => setShowProfile(true)}
+        onClose={function () {
+          setSidebarOpen(false);
+        }}
+        onOpenAbout={function () {
+          setShowAbout(true);
+        }}
+        onOpenPrivacy={function () {
+          setShowPrivacy(true);
+        }}
+        onOpenTerms={function () {
+          setShowTerms(true);
+        }}
+        onOpenProfile={function () {
+          setShowProfile(true);
+        }}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -267,13 +322,23 @@ export default function App({ defaultMode = 'general' }) {
           <UserMenu
             user={user}
             onLogout={handleLogout}
-            onAboutClick={() => setShowAbout(true)}
-            onLoginClick={() => setShowLogin(true)}
-            onProfileClick={() => setShowProfile(true)}
+            onAboutClick={function () {
+              setShowAbout(true);
+            }}
+            onLoginClick={function () {
+              setShowLogin(true);
+            }}
+            onProfileClick={function () {
+              setShowProfile(true);
+            }}
           />
         </header>
 
-        <ModeSelector onMenuClick={() => setSidebarOpen(true)} />
+        <ModeSelector
+          onMenuClick={function () {
+            setSidebarOpen(true);
+          }}
+        />
 
         <div className="flex-1 min-h-0">
           <ChatWindow
@@ -287,31 +352,58 @@ export default function App({ defaultMode = 'general' }) {
         </div>
       </div>
 
-      {showLogin && <Login onSuccess={handleLoginSuccess} onClose={() => setShowLogin(false)} />}
+      {showLogin && (
+        <Login
+          onSuccess={handleLoginSuccess}
+          onClose={function () {
+            setShowLogin(false);
+          }}
+        />
+      )}
       {showAbout && (
         <AboutModal
-          onClose={() => setShowAbout(false)}
-          onOpenPrivacy={() => {
+          onClose={function () {
+            setShowAbout(false);
+          }}
+          onOpenPrivacy={function () {
             setShowAbout(false);
             setShowPrivacy(true);
           }}
-          onOpenTerms={() => {
+          onOpenTerms={function () {
             setShowAbout(false);
             setShowTerms(true);
           }}
         />
       )}
-      {showPrivacy && <PrivacyModal onClose={() => setShowPrivacy(false)} />}
-      {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
+      {showPrivacy && (
+        <PrivacyModal
+          onClose={function () {
+            setShowPrivacy(false);
+          }}
+        />
+      )}
+      {showTerms && (
+        <TermsModal
+          onClose={function () {
+            setShowTerms(false);
+          }}
+        />
+      )}
       {showProfile && (
         <ProfileModal
           user={user}
           theme={theme}
-          toggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+          toggleTheme={function () {
+            setTheme(function (t) {
+              return t === 'dark' ? 'light' : 'dark';
+            });
+          }}
           onLogout={handleLogout}
-          onClose={() => setShowProfile(false)}
+          onClose={function () {
+            setShowProfile(false);
+          }}
           onAccountDeleted={handleAccountDeleted}
-          onUserUpdated={(updatedUser) => {
+          onUserUpdated={function (updatedUser) {
             setUser(updatedUser);
             localStorage.setItem(USER_CACHE_KEY, JSON.stringify(updatedUser));
           }}
