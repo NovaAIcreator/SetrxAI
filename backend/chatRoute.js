@@ -164,7 +164,6 @@ router.post('/chat', optionalAuth, async (req, res) => {
   const userText = lastUserMessage?.content || '';
   const isValidSessionId = sessionId && !isNaN(Number(sessionId));
   const canSaveToDb = isValidSessionId && req.userId;
-  const lang = modePrompts.detectReplyLang ? modePrompts.detectReplyLang(userText) : 'english';
   const genOptions = {
     temperature: 0.28,
     max_tokens: maxTokensFor(mode, userText),
@@ -292,22 +291,23 @@ router.post('/chat', optionalAuth, async (req, res) => {
   });
   const dateNote = "\n\nToday's date: " + currentDate + '.';
   const searchNote = scoutPack.context
-    ? '\n\nLive web search results:\n' + scoutPack.context
+    ? '\n\nLive web search results (prefer these when relevant; cite links):\n' + scoutPack.context
     : '';
   const labNote = labNotes
-    ? '\n\nLab agent notes (use carefully; no false claims):\n' + labNotes
+    ? '\n\nLab agent notes (known + web + possible). If notes say INSUFFICIENT, do not invent a full solution:\n' +
+      labNotes
     : '';
-  const fileNote = file ? '\n\nUser attached file "' + file.name + '":\n' + file.text : '';
-  const langNote =
-    lang === 'hinglish'
-      ? '\n\nUser language detected: Hinglish (Roman script). Reply Hinglish only. Zero Devanagari.'
-      : lang === 'hindi'
-        ? '\n\nUser language detected: Hindi Devanagari. Reply in Hindi.'
-        : '\n\nUser language detected: English. Reply in English.';
-  const extra = dateNote + searchNote + labNote + fileNote + langNote;
-  const finalSystemPrompt = modePrompts.buildSystemPrompt
-    ? modePrompts.buildSystemPrompt(mode, extra, userText)
-    : modePrompts[mode] + extra;
+  const fileNote = file
+    ? '\n\nUser attached file "' + file.name + '":\n' + file.text
+    : '';
+  const extra = dateNote + searchNote + labNote + fileNote;
+
+  // LLM language (Hinglish / Hindi / English) — not keyword lists
+  const finalSystemPrompt = modePrompts.buildSystemPromptAsync
+    ? await modePrompts.buildSystemPromptAsync(mode, extra, userText)
+    : modePrompts.buildSystemPrompt
+      ? modePrompts.buildSystemPrompt(mode, extra, userText)
+      : modePrompts[mode] + extra;
   const systemTokens = estimateTokens(finalSystemPrompt);
 
   const cleanMessages = messages
