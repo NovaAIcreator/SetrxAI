@@ -1,6 +1,3 @@
-// backend/agents.js
-// LLM decides Scout / Lab / Writer — no keyword lists for meaning
-
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { searchWeb } = require('./searchIntent');
 
@@ -12,21 +9,27 @@ function getGeminiKey() {
   return process.env.GEMINI_API_KEY || null;
 }
 
-function clip(s, n = 80) {
+function clip(s, n) {
+  n = n || 80;
   const t = String(s || '').replace(/\s+/g, ' ').trim();
   return t.length <= n ? t : t.slice(0, n) + '…';
 }
 
-/** LLM plans agents from the real user message (any wording) */
-async function planAgents({ userText, mode, hasFile, fileName, hasImage }) {
+async function planAgents(opts) {
+  const userText = opts.userText;
+  const mode = opts.mode;
+  const hasFile = opts.hasFile;
+  const fileName = opts.fileName;
+  const hasImage = opts.hasImage;
+
   const fallback = {
     scout: false,
     lab: false,
     searchQuery: '',
     labGoal: '',
-    scoutThoughts: ['No web lookup planned'],
-    labThoughts: ['No experiment planned'],
-    writerThoughts: ['Drafting a direct answer'],
+    scoutThoughts: ['No web lookup'],
+    labThoughts: ['No experiment'],
+    writerThoughts: ['Drafting answer'],
   };
 
   const key = getGeminiKey();
@@ -43,33 +46,30 @@ async function planAgents({ userText, mode, hasFile, fileName, hasImage }) {
       },
     });
 
-    const prompt = `You are the routing brain for SetrxAI (multi-agent).
-Mode=\( {mode}. hasFile= \){!!hasFile}. fileName=\( {fileName || 'none'}. hasImage= \){!!hasImage}.
-
-Decide tools from MEANING, not fixed keywords.
-- scout=true when outside/current facts, products, GitHub, news, prices, "who is", company, or verifying the web helps.
-- lab=true when the user wants invention, cure/research directions, design, deep problem-solving, coding implementation, experiments, strategy — even if they use different words (e.g. ilaj, solution, nikalo, how to solve).
-- Simple hi/thanks → both false.
-- GitHub "show me the repo/code" → scout true, lab false unless they ask to write/fix code.
-
-Output ONLY JSON:
-{
-  "scout": boolean,
-  "lab": boolean,
-  "searchQuery": "best short web query or empty",
-  "labGoal": "one line what Lab should explore or empty",
-  "scoutThoughts": ["2-4 short live status lines in English, specific to THIS message, no ellipsis spam"],
-  "labThoughts": ["2-4 short live status lines, specific", "..."] ,
-  "writerThoughts": ["2-3 short lines", "..."]
-}
-
-Rules for thoughts:
-- Mention real topic from the user message
-- If fileName set, Scout may mention reading that file
-- No emojis, no "..." chains, no generic "Checking if..."
-
-User message:
-${userText || '(empty)'}`;
+    const prompt =
+      'You are the routing brain for SetrxAI multi-agent system.\n' +
+      'Mode=' +
+      mode +
+      '. hasFile=' +
+      !!hasFile +
+      '. fileName=' +
+      (fileName || 'none') +
+      '. hasImage=' +
+      !!hasImage +
+      '.\n\n' +
+      'Decide from MEANING (not keyword lists):\n' +
+      '- scout=true when web/current facts, GitHub, news, prices, products, verify online helps\n' +
+      '- lab=true for deep problem-solving, research, design, coding implementation, invention framing, hard questions\n' +
+      '- hi/thanks → both false\n' +
+      '- show github/repo → scout true; write/fix code → lab true\n\n' +
+      'JSON only:\n' +
+      '{"scout":boolean,"lab":boolean,"searchQuery":"short or empty","labGoal":"one line or empty",' +
+      '"scoutThoughts":["2-4 short specific status lines"],' +
+      '"labThoughts":["2-4 short specific lines"],' +
+      '"writerThoughts":["2-3 short lines"]}\n' +
+      'No emojis. Mention real topic from user message.\n\n' +
+      'User message:\n' +
+      (userText || '(empty)');
 
     const r = await model.generateContent(prompt);
     const raw = (r.response.text() || '').replace(/```json|```/g, '').trim();
@@ -80,9 +80,15 @@ ${userText || '(empty)'}`;
       lab: !!p.lab,
       searchQuery: String(p.searchQuery || '').slice(0, 200),
       labGoal: String(p.labGoal || '').slice(0, 200),
-      scoutThoughts: Array.isArray(p.scoutThoughts) ? p.scoutThoughts.map(String).slice(0, 5) : fallback.scoutThoughts,
-      labThoughts: Array.isArray(p.labThoughts) ? p.labThoughts.map(String).slice(0, 5) : fallback.labThoughts,
-      writerThoughts: Array.isArray(p.writerThoughts) ? p.writerThoughts.map(String).slice(0, 4) : fallback.writerThoughts,
+      scoutThoughts: Array.isArray(p.scoutThoughts)
+        ? p.scoutThoughts.map(String).slice(0, 5)
+        : fallback.scoutThoughts,
+      labThoughts: Array.isArray(p.labThoughts)
+        ? p.labThoughts.map(String).slice(0, 5)
+        : fallback.labThoughts,
+      writerThoughts: Array.isArray(p.writerThoughts)
+        ? p.writerThoughts.map(String).slice(0, 4)
+        : fallback.writerThoughts,
     };
   } catch (e) {
     console.error('planAgents', e.message);
@@ -90,71 +96,124 @@ ${userText || '(empty)'}`;
   }
 }
 
-/** Run Scout: real Tavily search */
-async function runScout({ searchQuery, userText, onProgress }) {
-  const q = (searchQuery || userText || '').trim();
+async function runScout(opts) {
+  const searchQuery = opts.searchQuery;
+  const userText = opts.userText;
+  const onProgress = opts.onProgress;
+  const q = String(searchQuery || userText || '').trim();
+
   if (!q) {
-    onProgress?.({ detail: 'No query', line: 'Scout idle' });
-    return { sources: [], context: '' };
+    if (onProgress) onProgress({ detail: 'Idle', line: 'No search query' });
+    return { sources: [], context: '', checks: [] };
   }
 
-  onProgress?.({ detail: 'Searching', line: 'Query: ' + clip(q, 70) });
+  if (onProgress) onProgress({ detail: 'Searching', line: 'Query: ' + clip(q, 70) });
 
   try {
-    const formatted = await searchWeb(q);
-    if (!formatted) {
-      onProgress?.({ detail: 'No results', line: 'Empty web results for: ' + clip(q, 50) });
-      return { sources: [], context: '' };
+    const data = await searchWeb(q);
+    if (!data || !data.context) {
+      if (onProgress) onProgress({ detail: 'No results', line: 'Empty for: ' + clip(q, 50) });
+      return { sources: [], context: '', checks: [{ note: 'No web results' }] };
     }
-
-    // Parse rough sources from tavily-style block if needed; also return raw context for Writer
-    onProgress?.({ detail: 'Sources ready', line: 'Packed web context for Writer' });
+    const titles = (data.sources || [])
+      .slice(0, 3)
+      .map(function (s) {
+        return s.title;
+      })
+      .join(' · ');
+    if (onProgress) onProgress({ detail: 'Sources ready', line: titles || 'Context packed' });
     return {
-      sources: [], // optional: parse titles/urls if you extend searchWeb to return objects
-      context: formatted,
-      checks: [{ note: 'Live web via Tavily' }],
+      sources: data.sources || [],
+      context: data.context || '',
+      checks: [{ note: 'Tavily live search' }],
     };
   } catch (e) {
-    onProgress?.({ detail: 'Search failed', line: e.message || 'Tavily error' });
+    if (onProgress) onProgress({ detail: 'Search failed', line: e.message || 'error' });
     return { sources: [], context: '', checks: [{ note: 'Search error' }] };
   }
 }
 
-/** Run Lab: structured experiment notes (LLM) — not fake code */
-async function runLab({ userText, labGoal, mode, scoutContext, onProgress }) {
+/** 3-pass Lab: known + web + possible → critique → refine; refuse if still empty */
+async function runLab(opts) {
+  const userText = opts.userText;
+  const labGoal = opts.labGoal;
+  const mode = opts.mode;
+  const scoutContext = opts.scoutContext;
+  const onProgress = opts.onProgress;
+
   const key = getGeminiKey();
   if (!key) {
-    onProgress?.({ detail: 'Lab skipped', line: 'No API key' });
+    if (onProgress) onProgress({ detail: 'Lab skipped', line: 'No API key' });
     return { notes: '' };
   }
 
-  onProgress?.({ detail: 'Lab running', line: labGoal ? 'Goal: ' + clip(labGoal, 70) : 'Goal: ' + clip(userText, 70) });
+  const genAI = new GoogleGenerativeAI(key);
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    generationConfig: { temperature: 0.4, maxOutputTokens: 1400 },
+  });
 
-  try {
-    const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      generationConfig: { temperature: 0.4, maxOutputTokens: 900 },
-    });
+  const ctx = scoutContext ? String(scoutContext).slice(0, 3500) : '';
+  const goal = labGoal || userText;
 
-    const r = await model.generateContent(
-      `You are Lab agent for SetrxAI. Mode=${mode}.
-Do a careful thought experiment / research framing / solution design.
-Be honest: no fake cures, no invented papers.
-Output plain text notes (bullets ok), max \~400 words, for the Writer agent.
-
-Lab goal: ${labGoal || userText}
-User message: ${userText}
-${scoutContext ? '\nWeb context:\n' + String(scoutContext).slice(0, 3000) : ''}`
-    );
-
-    const notes = (r.response.text() || '').trim();
-    onProgress?.({ detail: 'Lab done', line: 'Notes length ' + notes.length + ' chars' });
-    return { notes };
-  } catch (e) {
-    onProgress?.({ detail: 'Lab failed', line: e.message || 'error' });
-    return { notes: '' };
+  if (onProgress) {
+    onProgress({ detail: 'Lab · Propose', line: 'Known + possible for: ' + clip(goal, 55) });
   }
+
+  const proposeRes = await model.generateContent(
+    'You are Lab-Propose for SetrxAI. Mode=' +
+      mode +
+      '.\n' +
+      'Combine: (1) established knowledge (2) web context if any (3) what is plausibly possible.\n' +
+      'TRY hard to be useful. If the problem is open/unsolved, do NOT claim a full solution or medical cure.\n' +
+      'Give strongest known results, partial strategies, constraints, next experiments.\n' +
+      'For coding: solid approach, edge cases, structure — real code ideas, not stubs only.\n\n' +
+      'Goal: ' +
+      goal +
+      '\nUser: ' +
+      userText +
+      '\n' +
+      (ctx ? 'Web context:\n' + ctx : '')
+  );
+  const proposal = (proposeRes.response.text() || '').trim();
+
+  if (onProgress) onProgress({ detail: 'Lab · Critique', line: 'Checking overclaims and gaps' });
+
+  const critiqueRes = await model.generateContent(
+    'You are Lab-Critique for SetrxAI.\n' +
+      'Find holes, overclaims, missing constraints.\n' +
+      'Flag anything that pretends an unsolved problem is fully solved or invents a cure.\n' +
+      'Short harsh constructive bullets.\n\nProposal:\n' +
+      proposal.slice(0, 6000)
+  );
+  const critique = (critiqueRes.response.text() || '').trim();
+
+  if (onProgress) {
+    onProgress({ detail: 'Lab · Refine', line: 'Merge + decide if answerable' });
+  }
+
+  const refineRes = await model.generateContent(
+    'You are Lab-Refine for SetrxAI. FINAL notes for Writer.\n' +
+      'Rules:\n' +
+      '- Merge known facts + confirmed web signals + plausible options\n' +
+      '- Apply critique; remove false certainty\n' +
+      '- If after all this there is still no responsible answer, say clearly: INSUFFICIENT — Writer must decline inventing one\n' +
+      '- Never invent papers, trial IDs, or formal proofs of open problems\n' +
+      '- Coding tasks: concrete structure Writer can turn into full files\n' +
+      'Sections: Known | Web-supported | Plausible next steps | Limits / refuse if needed\n\n' +
+      'Proposal:\n' +
+      proposal.slice(0, 4000) +
+      '\n\nCritique:\n' +
+      critique.slice(0, 2500) +
+      '\n\nUser goal: ' +
+      goal
+  );
+  const notes = (refineRes.response.text() || '').trim();
+
+  if (onProgress) {
+    onProgress({ detail: 'Lab done', line: 'Notes ready (' + notes.length + ' chars)' });
+  }
+  return { notes: notes, proposal: proposal, critique: critique };
 }
 
-module.exports = { planAgents, runScout, runLab };
+module.exports = { planAgents: planAgents, runScout: runScout, runLab: runLab };
