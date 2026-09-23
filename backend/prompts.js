@@ -1,15 +1,48 @@
-const HINGLISH_RE =
-  /\b(hai|hain|hoon|hun|tha|thi|the|kya|kyu|kyun|kyunki|kyuki|nahi|nahin|nhi|mat|karo|karna|krna|kro|kr|kiya|kiye|mujhe|mujhko|mera|meri|mere|tum|tumhe|tumhara|aap|apna|apni|yeh|woh|iska|uska|kaise|kese|kahan|kaha|kab|kitna|kitni|bahut|bohot|thoda|abhi|phir|lekin|magar|bhi|toh|mein|hum|ham|kaam|jaruri|zaruri|jana|jaana|gaya|gayi|chahiye|chahie|yaar|yrr|bhai|accha|acha|theek|thik|sahi|galat|batao|btao|banao|bnado|dena|dijiye|waha|yaha|idhar|udhar|jaldi|baad|pehle|sirf|bas|kisi|kuch|koi|liye|usse|usko|isme|usme|karunga|karungi)\b/i;
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+
+function getGeminiKey() {
+  for (let i = 1; i <= 10; i++) {
+    const k = process.env['GEMINI_KEYS_' + i];
+    if (k && k.trim()) return k.trim();
+  }
+  return process.env.GEMINI_API_KEY || null;
+}
 
 function detectReplyLang(text) {
   const t = String(text || '').trim();
+  if (!t) return 'english';
   if (/[\u0900-\u097F]/.test(t)) return 'hindi';
-  const hits = t.match(new RegExp(HINGLISH_RE.source, 'gi')) || [];
-  const unique = new Set(hits.map((w) => w.toLowerCase()));
-  if (unique.size >= 2) return 'hinglish';
-  const strong =
-    /\b(mujhe|mujhko|kya|nahi|nahin|nhi|karo|krna|kro|yaar|yrr|kaise|kese|chahiye|batao|btao|theek|thik|accha|acha|jaruri|zaruri|jana|jaana|kaam|kisi|kyun|kyunki)\b/i;
-  if (strong.test(t)) return 'hinglish';
+  return 'english';
+}
+
+async function detectReplyLangAsync(text) {
+  const t = String(text || '').trim();
+  if (!t) return 'english';
+  if (/[\u0900-\u097F]/.test(t)) return 'hindi';
+
+  const key = getGeminiKey();
+  if (!key) return 'english';
+
+  try {
+    const genAI = new GoogleGenerativeAI(key);
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash',
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 30,
+        responseMimeType: 'application/json',
+      },
+    });
+    const r = await model.generateContent(
+      'Classify language. JSON only: {"lang":"english"|"hindi"|"hinglish"}\n' +
+        'hindi=Devanagari, hinglish=Hindi in Roman letters, english=English.\nUser: ' +
+        t.slice(0, 500)
+    );
+    const p = JSON.parse((r.response.text() || '').replace(/```json|```/g, '').trim());
+    if (p.lang === 'hindi' || p.lang === 'hinglish' || p.lang === 'english') return p.lang;
+  } catch (e) {
+    console.warn('lang detect', e.message);
+  }
   return 'english';
 }
 
@@ -21,59 +54,48 @@ function wantsLongForm(text) {
 
 function languageLock(lang) {
   if (lang === 'hinglish') {
-    return `LANGUAGE LOCK (highest priority — never break this):
-The user wrote Hinglish: Hindi words in English/Roman letters.
-Reply in the SAME Hinglish. Roman script only.
-- NEVER use Devanagari. Not one word of हिंदी लिपि.
-- Do not "upgrade" to pure Hindi or pure English.
-- Code, file names, and commands stay English.`;
+    return `LANGUAGE LOCK: User wrote Hinglish (Roman). Reply Hinglish only. Zero Devanagari. Code stays English.`;
   }
   if (lang === 'hindi') {
-    return `LANGUAGE LOCK (highest priority):
-User wrote in Hindi (Devanagari). Reply in Hindi Devanagari.
-Do not reply in English except for code, names, and URLs.`;
+    return `LANGUAGE LOCK: User wrote Hindi Devanagari. Reply in Hindi. Code/names/URLs may stay English.`;
   }
-  return `LANGUAGE LOCK (highest priority):
-User wrote in English. Reply in English only.
-Do not switch to Hindi or Hinglish. Code stays English.`;
+  return `LANGUAGE LOCK: User wrote English. Reply in English only.`;
 }
 
 function lengthLock(userText) {
   if (wantsLongForm(userText)) {
-    return `LENGTH: They asked for depth (notes / full code / detail). Be complete and well structured. Skip filler and recap.`;
+    return `LENGTH: Full depth requested. Complete structured answer. No filler.`;
   }
-  return `LENGTH (ChatGPT-style helpful depth — highest priority):
-Do NOT give thin 2–3 line answers for real questions.
-- Write like a careful ChatGPT reply: clear, useful, a bit generous.
-- Structure: short opening line → 3–6 concrete points or short paragraphs → optional tip or next step.
-- Shopping / advice / how-to: compare options, price range, why, and links when asked.
-- Greetings only: 1 short line.
-- No "Great question", no "Sure!", no essay dump, no repeated recap.
-- Still scannable on phone.`;
+  return `LENGTH: Helpful ChatGPT-depth. Not thin 2-line answers. Greetings only: 1 short line.`;
 }
 
-const CORE = `You are SetrxAI — a careful, high-trust assistant.
-- Direct, calm, specific. No hype, no "great question", no "as an AI".
-- If unsure, say so briefly, then give the best grounded answer.
-- Never invent APIs, citations, file paths, or facts.
-- Match answer size to the need: helpful depth, not one-liners, not walls of filler.
-- **Bold** only key terms.
-- Code: full files, language tag, exact path before each block. No stubs.`;
+const CORE = `You are SetrxAI — careful, high-trust, strong at coding and reasoning.
+
+ANSWER STRATEGY:
+1) Use established knowledge.
+2) Use WEB CONTEXT when provided (prefer confirmed sources).
+3) Add what is plausibly possible (clearly labeled — not as proven fact).
+4) If after knowledge + web + careful reasoning there is still no responsible answer, REFUSE to invent one. Say what is missing.
+
+HARD RULES:
+- Do not invent the future.
+- No fake full cures or fake proofs of famous open problems.
+- Never invent papers, DOIs, APIs, file paths.
+- Coding: full paste-ready files, language tags, real paths. No empty stubs.
+- Medical: educational only; suggest qualified clinician for personal care.
+
+STYLE: Direct, calm, specific. No hype. **Bold** key terms only.`;
 
 const modePrompts = {
   general:
     CORE +
-    `\nBe concrete: steps, names, numbers, options with tradeoffs. Sound helpful and complete.`,
+    `\nConcrete steps, numbers, tradeoffs. Hard problems: known + web + possible; refuse if still empty.`,
   study:
     CORE +
-    `\nTutor mode. Teach why it works, examples, common mistakes.
-Full notes when they ask for notes / revision / a chapter.
-Hinglish stays Hinglish.`,
+    `\nTutor mode. Why it works, examples, mistakes. Full notes when asked.`,
   coding:
     CORE +
-    `\nSenior engineer. Full paste-ready files. Errors and edge cases included.
-Prefer React + Node + Tailwind if stack unknown.
-Match their language for the explanation; code stays English.`,
+    `\nSenior engineer. Full working files. Edge cases. Prefer React+Node+Tailwind if stack unknown. Explanation matches user language; code in English.`,
 };
 
 function buildSystemPrompt(mode, extra, userText) {
@@ -81,16 +103,26 @@ function buildSystemPrompt(mode, extra, userText) {
   const t = String(userText || '').trim();
   const lang = t ? detectReplyLang(t) : 'english';
   const locks = t ? '\n\n' + languageLock(lang) + '\n\n' + lengthLock(t) : '';
+  return base + (extra || '') + locks;
+}
+
+async function buildSystemPromptAsync(mode, extra, userText) {
+  const base = modePrompts[mode] || modePrompts.general;
+  const t = String(userText || '').trim();
+  const lang = t ? await detectReplyLangAsync(t) : 'english';
+  const locks = t ? '\n\n' + languageLock(lang) + '\n\n' + lengthLock(t) : '';
   const reminder =
     lang === 'hinglish'
-      ? '\n\nFinal reminder: Hinglish only (Roman letters). Zero Devanagari. Helpful ChatGPT-depth answer — not a one-liner unless it is only a greeting.'
+      ? '\n\nReply Hinglish (Roman only).'
       : lang === 'hindi'
-        ? '\n\nFinal reminder: Hindi Devanagari. Helpful depth — not a one-liner unless greeting only.'
-        : '\n\nFinal reminder: English. Helpful ChatGPT-depth answer — not a one-liner unless greeting only.';
+        ? '\n\nReply Hindi Devanagari.'
+        : '\n\nReply English.';
   return base + (extra || '') + locks + (t ? reminder : '');
 }
 
 modePrompts.buildSystemPrompt = buildSystemPrompt;
+modePrompts.buildSystemPromptAsync = buildSystemPromptAsync;
 modePrompts.detectReplyLang = detectReplyLang;
+modePrompts.detectReplyLangAsync = detectReplyLangAsync;
 
 module.exports = modePrompts;
