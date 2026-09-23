@@ -626,11 +626,6 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
 
     const imagesToSend = imagePreviews.map((p) => ({ mimeType: p.mimeType, data: p.data }));
     const fileToSend = attachedFile ? { name: attachedFile.name, text: attachedFile.text } : null;
-    const queryText = input.trim() || displayText;
-    const intent = classifyIntent(queryText, mode);
-    const doSearch = intent.search;
-    const wantLab = intent.lab;
-    const modeLabel = MODES.find((m) => m.id === mode)?.label || mode;
 
     setInput('');
     setImagePreviews([]);
@@ -648,172 +643,19 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     setMessages((prev) => prev.concat([{ role: 'assistant', content: '', agents: initial }]));
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-    try {
-      let scoutResult = null;
-      let labHtml = null;
-      let scoutSummary = 'no web sources';
-      let labSummary = 'no lab run';
+    let scoutResult = null;
+    let labHtml = null;
+    let chars = 0;
+    let writerStreamNoted = false;
 
-      /* ── SCOUT — lines = real query / file ── */
+    try {
       if (fileName) {
         patchAgent('scout', {
           status: 'running',
-          detail: 'Reading attached file',
-          line: 'File: ' + fileName,
-        });
-        await delay(350);
-        patchAgent('scout', {
-          detail: 'File in context',
-          line: 'Using text extracted from ' + fileName,
-        });
-        await delay(300);
-      }
-
-      if (doSearch) {
-        patchAgent('scout', {
-          status: 'running',
-          detail: 'Search',
-          line: 'Query: ' + short(queryText, 72),
-        });
-        await delay(450);
-        patchAgent('scout', {
-          detail: 'Search',
-          line: 'Mode: ' + modeLabel + (fileName ? ' · with ' + fileName : ''),
-        });
-        await delay(400);
-
-        const smart = buildSmartSources(queryText);
-        if (smart.sources.length) {
-          const titles = smart.sources.map((s) => s.title).join(' · ');
-          patchAgent('scout', {
-            detail: 'Sources found',
-            line: titles,
-          });
-          await delay(300);
-          patchAgent('scout', {
-            status: 'done',
-            detail: 'Sources ready',
-            line: smart.sources.map((s) => s.url.replace(/^https?:\/\//, '')).join(' · '),
-          });
-          scoutResult = smart;
-          setActiveSources(smart);
-          scoutSummary = titles;
-        } else {
-          patchAgent('scout', {
-            status: 'done',
-            detail: 'No live web yet',
-            line: 'Query kept for Writer: ' + short(queryText, 60),
-          });
-          scoutResult = smart;
-          setActiveSources(null);
-          scoutSummary = 'no verified links';
-        }
-      } else {
-        patchAgent('scout', {
-          status: 'running',
-          detail: 'No search',
-          line: 'Message: ' + short(queryText, 70),
-        });
-        await delay(250);
-        patchAgent('scout', {
-          status: 'done',
-          detail: 'Search off',
-          line: fileName ? 'Relying on ' + fileName + ' + chat' : 'Relying on chat only',
+          detail: 'File',
+          line: 'Attached: ' + fileName,
         });
       }
-
-      /* ── LAB — domain from REAL message ── */
-      if (wantLab) {
-        const isBio = /\b(cancer|cure|ilaj|disease|virus|vaccine|dna|gene|cell|treatment)\b/i.test(
-          queryText
-        );
-        const isCode =
-          mode === 'coding' ||
-          /\b(code|debug|api|react|function|implement|algorithm|component)\b/i.test(queryText);
-
-        patchAgent('lab', {
-          status: 'running',
-          detail: 'Lab on',
-          line: 'Task: ' + short(queryText, 70),
-        });
-        await delay(400);
-
-        if (isBio) {
-          patchAgent('lab', {
-            detail: 'Science path',
-            line: 'Topic matches medical / biology language in your message',
-          });
-          await delay(450);
-          patchAgent('lab', {
-            detail: 'Reasoning',
-            line: 'What research can claim vs what it cannot for: ' + short(queryText, 48),
-          });
-          await delay(400);
-          patchAgent('lab', {
-            status: 'done',
-            detail: 'Lab done',
-            line: 'Honest science notes for Writer on: ' + short(queryText, 40),
-          });
-          labSummary = 'bio/medical reasoning';
-        } else if (isCode) {
-          patchAgent('lab', {
-            detail: 'Code path',
-            line: 'Mode ' + modeLabel + ' · building approach for: ' + short(queryText, 50),
-          });
-          await delay(450);
-          patchAgent('lab', {
-            status: 'done',
-            detail: 'Lab done',
-            line: 'Structure notes ready' + (fileName ? ' · file ' + fileName : ''),
-          });
-          labSummary = 'code structure';
-        } else {
-          patchAgent('lab', {
-            detail: 'Problem solving',
-            line: 'Breaking down: ' + short(queryText, 64),
-          });
-          await delay(450);
-          patchAgent('lab', {
-            status: 'done',
-            detail: 'Lab done',
-            line: 'Options and trade-offs for Writer',
-          });
-          labSummary = 'general experiment';
-        }
-        labHtml = null;
-        setActiveArtifact(null);
-      } else {
-        patchAgent('lab', {
-          status: 'running',
-          detail: 'Lab off',
-          line: 'No experiment needed for: ' + short(queryText, 56),
-        });
-        await delay(220);
-        patchAgent('lab', {
-          status: 'done',
-          detail: 'Lab idle',
-          line: 'Straight to Writer',
-        });
-      }
-
-      /* ── WRITER — references real scout/lab output ── */
-      patchAgent('writer', {
-        status: 'running',
-        detail: 'Outline',
-        line:
-          'Scout: ' +
-          scoutSummary +
-          ' · Lab: ' +
-          labSummary +
-          (fileName ? ' · File: ' + fileName : ''),
-      });
-      await delay(300);
-      patchAgent('writer', {
-        detail: 'Writing',
-        line: 'Answering: ' + short(queryText, 64),
-      });
-
-      let writerStreamNoted = false;
 
       const response = await api.chatStream(
         mode,
@@ -828,7 +670,6 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let chars = 0;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -844,6 +685,24 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
           try {
             const parsed = JSON.parse(jsonStr);
 
+            // Backend live agents (Scout / Lab / Writer)
+            if (parsed.agent && parsed.agent.id) {
+              const a = parsed.agent;
+              patchAgent(a.id, {
+                status: a.status || 'running',
+                detail: a.detail || a.status || '',
+                line: a.logLine || a.detail || '',
+              });
+            }
+
+            if (parsed.sources) {
+              scoutResult = {
+                sources: parsed.sources,
+                checks: parsed.checks || [],
+              };
+              setActiveSources(scoutResult);
+            }
+
             if (parsed.chunk) chars += String(parsed.chunk).length;
 
             if ((parsed.chunk || parsed.replace) && !writerStreamNoted) {
@@ -852,16 +711,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
               patchAgent('writer', {
                 status: 'running',
                 detail: 'Streaming',
-                line: 'Sending answer for: ' + short(queryText, 50),
-              });
-            }
-
-            // live char count (not same line spam)
-            if (parsed.chunk && chars > 0 && chars % 180 < String(parsed.chunk).length) {
-              patchAgent('writer', {
-                status: 'running',
-                detail: 'Streaming',
-                line: 'Written \~' + chars + ' characters',
+                line: 'Sending answer',
               });
             }
 
@@ -908,26 +758,35 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
                 return u;
               });
             }
+
+            if (parsed.done) {
+              patchAgent('writer', {
+                status: 'done',
+                detail: 'Done',
+                line: chars ? 'Sent ~' + chars + ' characters' : 'Answer delivered',
+              });
+            }
           } catch {
             /* skip bad chunk */
           }
         }
       }
 
-      patchAgent('writer', {
-        status: 'done',
-        detail: 'Done',
-        line:
-          (chars ? 'Sent \~' + chars + ' characters · ' : '') +
-          'View thinking to re-read steps',
-      });
+      const snap = agentsRef.current;
+      if (snap && snap.writer && snap.writer.status !== 'done') {
+        patchAgent('writer', {
+          status: 'done',
+          detail: 'Done',
+          line: chars ? 'Sent ~' + chars + ' characters' : 'Answer delivered',
+        });
+      }
       persistAgentsOnLastAssistant();
     } catch {
       setWaitingFirstChunk(false);
       patchAgent('writer', {
         status: 'done',
         detail: 'Failed',
-        line: 'Connection error on: ' + short(queryText, 40),
+        line: 'Connection error',
       });
       persistAgentsOnLastAssistant();
       setMessages((prev) => {
