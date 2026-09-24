@@ -69,7 +69,12 @@ function AgentMind({ agents, live }) {
   }, [live]);
   if (!agents) return null;
   const order = ['scout', 'lab', 'writer'];
-  const anyRunning = order.some((id) => agents[id]?.status === 'running');
+  const visible = order.filter((id) => {
+    const a = agents[id];
+    return a && (a.status === 'running' || a.status === 'done');
+  });
+  if (!visible.length && !live) return null;
+  const anyRunning = visible.some((id) => agents[id]?.status === 'running');
 
   return (
     <div className="mb-3 max-w-[95%]">
@@ -84,19 +89,15 @@ function AgentMind({ agents, live }) {
         </span>
       </button>
       {open && (
-        <div className="space-y-3 pl-0.5">
-          {order.map((id) => {
+        <div className="space-y-4 pl-0.5">
+          {visible.map((id) => {
             const a = agents[id];
-            if (!a) return null;
             const meta = AGENT_META[id];
             const running = a.status === 'running';
             return (
               <div
                 key={id}
-                className={
-                  'flex items-start gap-2.5 transition-opacity duration-300 ' +
-                  (running ? 'opacity-100' : a.status === 'done' ? 'opacity-85' : 'opacity-50')
-                }
+                className="flex items-start gap-2.5 animate-[fadeSlide_0.35s_ease-out] opacity-100"
               >
                 <SmileBall size={22} tone={meta.tone} bounce={running} />
                 <div className="min-w-0 flex-1">
@@ -105,17 +106,22 @@ function AgentMind({ agents, live }) {
                       {meta.label}
                     </span>
                     <span className="text-[11px] text-zinc-500">{meta.role}</span>
+                    {running && (
+                      <span className="text-[10px] text-sky-500 dark:text-sky-400">live</span>
+                    )}
                   </div>
-                  <p className="text-[12.5px] text-zinc-600 dark:text-zinc-300 mt-0.5 leading-snug">
-                    {a.detail}
-                  </p>
+                  {a.detail ? (
+                    <p className="text-[12.5px] text-zinc-600 dark:text-zinc-300 mt-0.5 leading-snug">
+                      {a.detail}
+                    </p>
+                  ) : null}
                   {a.lines?.length > 0 && (
-                    <div className="mt-1.5 space-y-1 border-l border-zinc-300/50 dark:border-white/10 pl-2.5">
+                    <div className="mt-1.5 space-y-1.5 border-l border-zinc-300/50 dark:border-white/10 pl-2.5">
                       {a.lines.map((line, i) => (
                         <p
-                          key={i}
+                          key={id + '-' + i}
                           className={
-                            'text-[11.5px] leading-relaxed ' +
+                            'text-[11.5px] leading-relaxed animate-[fadeSlide_0.3s_ease-out] ' +
                             (running && i === a.lines.length - 1
                               ? 'text-zinc-700 dark:text-zinc-200'
                               : 'text-zinc-500')
@@ -130,6 +136,9 @@ function AgentMind({ agents, live }) {
               </div>
             );
           })}
+          {live && !visible.length && (
+            <p className="text-[12px] text-zinc-500 pl-1">Starting…</p>
+          )}
         </div>
       )}
       <style>{`
@@ -140,6 +149,10 @@ function AgentMind({ agents, live }) {
         @keyframes img-shimmer {
           0% { background-position: 200% 0; }
           100% { background-position: -200% 0; }
+        }
+        @keyframes fadeSlide {
+          from { opacity: 0; transform: translateY(4px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>
@@ -330,9 +343,9 @@ function delay(ms) {
 
 function emptyAgents() {
   return {
-    scout: { status: 'waiting', detail: '—', lines: [] },
-    lab: { status: 'waiting', detail: '—', lines: [] },
-    writer: { status: 'waiting', detail: '—', lines: [] },
+    scout: null,
+    lab: null,
+    writer: null,
   };
 }
 
@@ -378,6 +391,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
   const shouldScrollRef = useRef(false);
   const lastImageJob = useRef(null);
   const agentsRef = useRef(null);
+  const agentQueueRef = useRef(Promise.resolve());
 
   const isEmpty = messages.length === 0;
 
@@ -419,18 +433,42 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     recognitionRef.current = r;
   }, []);
 
-  const patchAgent = (id, patch) => {
+  const applyAgentPatch = (id, patch) => {
     setLiveAgents((prev) => {
       const base = prev || emptyAgents();
-      const cur = base[id] || { status: 'waiting', detail: '', lines: [] };
-      let lines = cur.lines || [];
+      const cur = base[id] || { status: 'running', detail: '', lines: [] };
+      let lines = cur.lines ? cur.lines.slice() : [];
       if (patch.line) {
-        const t = String(patch.line).trim();
-        if (t && lines[lines.length - 1] !== t) lines = [...lines, t].slice(-8);
+        const line = String(patch.line).trim();
+        if (line && line !== '—' && lines[lines.length - 1] !== line) {
+          lines = lines.concat([line]).slice(-12);
+        }
       }
-      const next = { ...base, [id]: { ...cur, ...patch, lines } };
+      const detail =
+        patch.detail !== undefined && patch.detail !== '—'
+          ? patch.detail
+          : cur.detail && cur.detail !== '—'
+            ? cur.detail
+            : patch.detail || '';
+      const next = {
+        ...base,
+        [id]: {
+          ...cur,
+          ...patch,
+          detail,
+          lines,
+        },
+      };
       agentsRef.current = next;
       return next;
+    });
+  };
+
+  // Stagger agent updates so lines appear one-by-one (readable)
+  const patchAgent = (id, patch) => {
+    agentQueueRef.current = agentQueueRef.current.then(async () => {
+      applyAgentPatch(id, patch);
+      await delay(320);
     });
   };
 
@@ -636,6 +674,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     setActiveSources(null);
     setActiveArtifact(null);
 
+    agentQueueRef.current = Promise.resolve();
     const initial = emptyAgents();
     agentsRef.current = initial;
     setLiveAgents(initial);
@@ -691,6 +730,7 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
             // Backend live agents (Scout / Lab / Writer)
             if (parsed.agent && parsed.agent.id) {
               const a = parsed.agent;
+              setWaitingFirstChunk(false);
               patchAgent(a.id, {
                 status: a.status || 'running',
                 detail: a.detail || a.status || '',
@@ -815,7 +855,8 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
     }
   };
 
-  const displayMessages = waitingFirstChunk ? messages.slice(0, -1) : messages;
+  // Keep last assistant visible so Scout/Lab/Writer thinking shows (no blank — gap)
+  const displayMessages = messages;
   const placeholder = imagePreviews.length
     ? 'Photo attached — ask or say improve this…'
     : forceImageGen
