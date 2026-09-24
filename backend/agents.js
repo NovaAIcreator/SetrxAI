@@ -15,6 +15,64 @@ function clip(s, n) {
   return t.length <= n ? t : t.slice(0, n) + '…';
 }
 
+/** Rescues when LLM wrongly turns scout/lab off */
+function safetyNetPlan(userText, plan, mode) {
+  const t = String(userText || '').toLowerCase();
+  const out = Object.assign({}, plan);
+
+  const clearlyNeedsWeb =
+    /github|repo|repository|gitlab|bitbucket/.test(t) ||
+    /\b(search|dhundo|dhoondo|dhoondho|google|browse|look up|lookup|find online|internet|web se)\b/.test(t) ||
+    /\b(latest|current|today|price|news|stock|weather|who is|kya hai)\b/.test(t) ||
+    /\b(setrxai|setrx ai|setrx)\b/.test(t) ||
+    /\b(docs|documentation|official site|website|url|link do)\b/.test(t) ||
+    /\b(code dekho|source code|pura code|sare codes|saare codes)\b/.test(t);
+
+  const clearlyNeedsLab =
+    mode === 'coding' ||
+    /\b(lab|experiment|invent|design system|architecture|implement|refactor)\b/.test(t) ||
+    /\b(cure|ilaj|vaccine|treatment|cancer|unsolved|prove|derive|hypothesis)\b/.test(t) ||
+    /\b(full code|complete file|banao|build me|write a|fix this)\b/.test(t) ||
+    /\b(deep|research|strategy|roadmap|brainstorm|soch ke|analyze deeply)\b/.test(t);
+
+  if (clearlyNeedsWeb && !out.scout) {
+    out.scout = true;
+    out.searchQuery = (out.searchQuery || userText || '').slice(0, 200);
+    out.scoutThoughts = [
+      'Web lookup required',
+      'Query: ' + clip(out.searchQuery || userText, 70),
+    ];
+  }
+
+  if (/\b(setrxai|setrx)\b/.test(t) || (/github/.test(t) && /repo|code|source/.test(t))) {
+    out.scout = true;
+    if (!out.searchQuery || out.searchQuery.length < 8) {
+      out.searchQuery = /setrx/.test(t)
+        ? 'SetrxAI GitHub NovaAIcreator SetrxAI repository'
+        : clip(userText, 120);
+    }
+    out.scoutThoughts = [
+      'Searching GitHub / web',
+      'Query: ' + clip(out.searchQuery, 70),
+    ];
+  }
+
+  if (clearlyNeedsLab && !out.lab) {
+    out.lab = true;
+    out.labGoal = (out.labGoal || userText || '').slice(0, 200);
+    out.labThoughts = [
+      'Deep work / experiment',
+      'Goal: ' + clip(out.labGoal || userText, 70),
+    ];
+  }
+
+  if (!out.writerThoughts || !out.writerThoughts.length) {
+    out.writerThoughts = ['Drafting answer', 'Using Scout/Lab context if any'];
+  }
+
+  return out;
+}
+
 async function planAgents(opts) {
   const userText = opts.userText;
   const mode = opts.mode;
@@ -22,7 +80,7 @@ async function planAgents(opts) {
   const fileName = opts.fileName;
   const hasImage = opts.hasImage;
 
-  const fallback = {
+  const empty = {
     scout: false,
     lab: false,
     searchQuery: '',
@@ -32,75 +90,84 @@ async function planAgents(opts) {
     writerThoughts: ['Drafting answer'],
   };
 
+  let plan = empty;
   const key = getGeminiKey();
-  if (!key) return fallback;
 
-  try {
-    const genAI = new GoogleGenerativeAI(key);
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      generationConfig: {
-        temperature: 0.25,
-        maxOutputTokens: 500,
-        responseMimeType: 'application/json',
-      },
-    });
+  if (key) {
+    try {
+      const genAI = new GoogleGenerativeAI(key);
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 500,
+          responseMimeType: 'application/json',
+        },
+      });
 
-    const prompt =
-      'You are the routing brain for SetrxAI multi-agent system.\n' +
-      'Mode=' +
-      mode +
-      '. hasFile=' +
-      !!hasFile +
-      '. fileName=' +
-      (fileName || 'none') +
-      '. hasImage=' +
-      !!hasImage +
-      '.\n\n' +
-      'Decide from MEANING (not keyword lists):\n' +
-      '- scout=true when web/current facts, GitHub, news, prices, products, verify online helps\n' +
-      '- lab=true for deep problem-solving, research, design, coding implementation, invention framing, hard questions\n' +
-      '- hi/thanks → both false\n' +
-      '- show github/repo → scout true; write/fix code → lab true\n\n' +
-      'JSON only:\n' +
-      '{"scout":boolean,"lab":boolean,"searchQuery":"short or empty","labGoal":"one line or empty",' +
-      '"scoutThoughts":["2-4 short specific status lines"],' +
-      '"labThoughts":["2-4 short specific lines"],' +
-      '"writerThoughts":["2-3 short lines"]}\n' +
-      'No emojis. Mention real topic from user message.\n\n' +
-      'User message:\n' +
-      (userText || '(empty)');
+      const prompt =
+        'You route tools for SetrxAI. Be GENEROUS with scout/lab when useful.\n' +
+        'Mode=' +
+        mode +
+        ' hasFile=' +
+        !!hasFile +
+        ' fileName=' +
+        (fileName || 'none') +
+        ' hasImage=' +
+        !!hasImage +
+        '\n\n' +
+        'RULES:\n' +
+        '1) scout=true if: GitHub, repo, web code, SetrxAI, search, prices, news, docs, dhundo, current facts.\n' +
+        '2) lab=true if: write/fix code, experiment, research, hard problem, design, deep analysis.\n' +
+        '3) Both false ONLY for hi/thanks/bye.\n' +
+        '4) GitHub/repo/codes → scout MUST true. Good searchQuery.\n' +
+        '5) Hinglish same (dhundo, batao, code dekho).\n\n' +
+        'JSON only:\n' +
+        '{"scout":boolean,"lab":boolean,"searchQuery":"string","labGoal":"string",' +
+        '"scoutThoughts":["2-4 short lines"],"labThoughts":["2-4 short lines"],"writerThoughts":["2-3 short lines"]}\n\n' +
+        'User:\n' +
+        (userText || '(empty)');
 
-    const r = await model.generateContent(prompt);
-    const raw = (r.response.text() || '').replace(/```json|```/g, '').trim();
-    const p = JSON.parse(raw);
+      const r = await model.generateContent(prompt);
+      const raw = (r.response.text() || '').replace(/```json|```/g, '').trim();
+      const p = JSON.parse(raw);
 
-    return {
-      scout: !!p.scout,
-      lab: !!p.lab,
-      searchQuery: String(p.searchQuery || '').slice(0, 200),
-      labGoal: String(p.labGoal || '').slice(0, 200),
-      scoutThoughts: Array.isArray(p.scoutThoughts)
-        ? p.scoutThoughts.map(String).slice(0, 5)
-        : fallback.scoutThoughts,
-      labThoughts: Array.isArray(p.labThoughts)
-        ? p.labThoughts.map(String).slice(0, 5)
-        : fallback.labThoughts,
-      writerThoughts: Array.isArray(p.writerThoughts)
-        ? p.writerThoughts.map(String).slice(0, 4)
-        : fallback.writerThoughts,
-    };
-  } catch (e) {
-    console.error('planAgents', e.message);
-    return fallback;
+      plan = {
+        scout: !!p.scout,
+        lab: !!p.lab,
+        searchQuery: String(p.searchQuery || '').slice(0, 200),
+        labGoal: String(p.labGoal || '').slice(0, 200),
+        scoutThoughts: Array.isArray(p.scoutThoughts)
+          ? p.scoutThoughts.map(String).slice(0, 5)
+          : empty.scoutThoughts,
+        labThoughts: Array.isArray(p.labThoughts)
+          ? p.labThoughts.map(String).slice(0, 5)
+          : empty.labThoughts,
+        writerThoughts: Array.isArray(p.writerThoughts)
+          ? p.writerThoughts.map(String).slice(0, 4)
+          : empty.writerThoughts,
+      };
+    } catch (e) {
+      console.error('planAgents LLM failed:', e.message);
+      plan = empty;
+    }
+  } else {
+    console.warn('planAgents: no Gemini key — safety net only');
   }
+
+  return safetyNetPlan(userText, plan, mode);
 }
 
 async function runScout(opts) {
   const searchQuery = opts.searchQuery;
   const userText = opts.userText;
   const onProgress = opts.onProgress;
-  const q = String(searchQuery || userText || '').trim();
+  let q = String(searchQuery || userText || '').trim();
+
+  const lower = (userText || '').toLowerCase();
+  if (/\b(setrxai|setrx)\b/.test(lower) && /github|repo|code|source/.test(lower)) {
+    q = 'SetrxAI GitHub NovaAIcreator/SetrxAI repository';
+  }
 
   if (!q) {
     if (onProgress) onProgress({ detail: 'Idle', line: 'No search query' });
@@ -112,6 +179,28 @@ async function runScout(opts) {
   try {
     const data = await searchWeb(q);
     if (!data || !data.context) {
+      if (q !== userText && userText) {
+        if (onProgress) onProgress({ detail: 'Retry', line: 'Broader: ' + clip(userText, 60) });
+        const data2 = await searchWeb(String(userText).slice(0, 200));
+        if (data2 && data2.context) {
+          if (onProgress) {
+            onProgress({
+              detail: 'Sources ready',
+              line: (data2.sources || [])
+                .slice(0, 3)
+                .map(function (s) {
+                  return s.title;
+                })
+                .join(' · '),
+            });
+          }
+          return {
+            sources: data2.sources || [],
+            context: data2.context || '',
+            checks: [{ note: 'Tavily retry' }],
+          };
+        }
+      }
       if (onProgress) onProgress({ detail: 'No results', line: 'Empty for: ' + clip(q, 50) });
       return { sources: [], context: '', checks: [{ note: 'No web results' }] };
     }
@@ -129,11 +218,10 @@ async function runScout(opts) {
     };
   } catch (e) {
     if (onProgress) onProgress({ detail: 'Search failed', line: e.message || 'error' });
-    return { sources: [], context: '', checks: [{ note: 'Search error' }] };
+    return { sources: [], context: '', checks: [{ note: 'Search error: ' + (e.message || '') }] };
   }
 }
 
-/** 3-pass Lab: known + web + possible → critique → refine; refuse if still empty */
 async function runLab(opts) {
   const userText = opts.userText;
   const labGoal = opts.labGoal;
@@ -164,10 +252,7 @@ async function runLab(opts) {
     'You are Lab-Propose for SetrxAI. Mode=' +
       mode +
       '.\n' +
-      'Combine: (1) established knowledge (2) web context if any (3) what is plausibly possible.\n' +
-      'TRY hard to be useful. If the problem is open/unsolved, do NOT claim a full solution or medical cure.\n' +
-      'Give strongest known results, partial strategies, constraints, next experiments.\n' +
-      'For coding: solid approach, edge cases, structure — real code ideas, not stubs only.\n\n' +
+      'Combine known + web + possible. No fake cures/proofs.\n' +
       'Goal: ' +
       goal +
       '\nUser: ' +
@@ -180,11 +265,7 @@ async function runLab(opts) {
   if (onProgress) onProgress({ detail: 'Lab · Critique', line: 'Checking overclaims and gaps' });
 
   const critiqueRes = await model.generateContent(
-    'You are Lab-Critique for SetrxAI.\n' +
-      'Find holes, overclaims, missing constraints.\n' +
-      'Flag anything that pretends an unsolved problem is fully solved or invents a cure.\n' +
-      'Short harsh constructive bullets.\n\nProposal:\n' +
-      proposal.slice(0, 6000)
+    'Lab-Critique. Find holes. Short bullets.\n\nProposal:\n' + proposal.slice(0, 6000)
   );
   const critique = (critiqueRes.response.text() || '').trim();
 
@@ -193,19 +274,12 @@ async function runLab(opts) {
   }
 
   const refineRes = await model.generateContent(
-    'You are Lab-Refine for SetrxAI. FINAL notes for Writer.\n' +
-      'Rules:\n' +
-      '- Merge known facts + confirmed web signals + plausible options\n' +
-      '- Apply critique; remove false certainty\n' +
-      '- If after all this there is still no responsible answer, say clearly: INSUFFICIENT — Writer must decline inventing one\n' +
-      '- Never invent papers, trial IDs, or formal proofs of open problems\n' +
-      '- Coding tasks: concrete structure Writer can turn into full files\n' +
-      'Sections: Known | Web-supported | Plausible next steps | Limits / refuse if needed\n\n' +
+    'Lab-Refine FINAL notes for Writer. If empty say INSUFFICIENT.\n' +
       'Proposal:\n' +
       proposal.slice(0, 4000) +
-      '\n\nCritique:\n' +
+      '\nCritique:\n' +
       critique.slice(0, 2500) +
-      '\n\nUser goal: ' +
+      '\nGoal: ' +
       goal
   );
   const notes = (refineRes.response.text() || '').trim();
