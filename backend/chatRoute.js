@@ -9,7 +9,7 @@ const modePrompts = require('./prompts');
 const authMiddleware = require('./authMiddleware');
 const pool = require('./db');
 const { think, verifyAnswer } = require('./brain');
-const { planAgents, runScout, runLab } = require('./agents');
+const { planAgents, runScout, runLab, runWriterCheck, withTimeout } = require('./agents');
 
 function collectKeys(prefix) {
   const arr = [];
@@ -139,8 +139,17 @@ function sse(res, obj) {
   res.write('data: ' + JSON.stringify(obj) + '\n\n');
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 function emitAgent(res, id, status, detail, logLine) {
   sse(res, { agent: { id, status, detail, logLine } });
+}
+
+async function emitAgentSlow(res, id, status, detail, logLine, ms) {
+  emitAgent(res, id, status, detail, logLine);
+  await sleep(ms != null ? ms : 280);
 }
 
 router.post('/chat', optionalAuth, async (req, res) => {
@@ -203,81 +212,134 @@ router.post('/chat', optionalAuth, async (req, res) => {
     mode,
   });
 
-  // Multi-agent plan (LLM meaning — any wording)
-  const plan = await planAgents({
-    userText,
-    mode,
-    hasFile: !!file,
-    fileName: file?.name || null,
-    hasImage: !!(allImages && allImages.length),
-  });
+  // Keep SSE alive on Render (prevent proxy idle cut)
+  const heartbeat = setInterval(() => {
+    try {
+      sse(res, { ping: Date.now() });
+    } catch (e) {}
+  }, 12000);
+  res.on('close', () => clearInterval(heartbeat));
+
+  // Multi-agent plan — never hang forever
+  let plan = {
+    scout: false,
+    lab: false,
+    searchQuery: '',
+    labGoal: '',
+    scoutThoughts: ['Planning…'],
+    labThoughts: ['Planning…'],
+    writerThoughts: ['Will write after tools'],
+  };
+  try {
+    emitAgent(res, 'writer', 'running', 'Planning', 'Deciding Scout / Lab / Writer');
+    plan = await withTimeout(
+      planAgents({
+        userText,
+        mode,
+        hasFile: !!file,
+        fileName: file?.name || null,
+        hasImage: !!(allImages && allImages.length),
+      }),
+      14000,
+      'planAgents'
+    );
+  } catch (e) {
+    console.error('planAgents failed:', e.message);
+    emitAgent(res, 'writer', 'running', 'Plan fallback', e.message || 'using defaults');
+  }
 
   // ── Scout ──
   if (file?.name) {
-    emitAgent(res, 'scout', 'running', 'File', 'Reading: ' + file.name);
+    emitAgent(res, 'scout', 'running', 'Reading file', 'File: ' + file.name);
   }
 
   let scoutPack = { sources: [], context: '', checks: [] };
 
   if (plan.scout) {
-    const thoughts = plan.scoutThoughts || ['Searching'];
-    emitAgent(res, 'scout', 'running', 'Search', thoughts[0] || 'Search');
-    for (let i = 1; i < thoughts.length; i++) {
-      emitAgent(res, 'scout', 'running', 'Search', thoughts[i]);
+    const qShow = plan.searchQuery || userText;
+    emitAgent(res, 'scout', 'running', 'Starting search', 'Will search: ' + String(qShow).slice(0, 90));
+    for (const line of plan.scoutThoughts || []) {
+      await emitAgentSlow(res, 'scout', 'running', 'Scout', line, 300);
     }
-    scoutPack = await runScout({
-      searchQuery: plan.searchQuery || userText,
-      userText,
-      onProgress: ({ detail, line }) => emitAgent(res, 'scout', 'running', detail, line),
-    });
-    emitAgent(res, 'scout', 'done', 'Sources ready', 'Context for Writer');
-    if (scoutPack.sources?.length) {
-      sse(res, { sources: scoutPack.sources, checks: scoutPack.checks || [] });
+    try {
+      scoutPack = await runScout({
+        searchQuery: plan.searchQuery || userText,
+        userText,
+        onProgress: ({ detail, line }) => emitAgent(res, 'scout', 'running', detail, line),
+      });
+      emitAgent(
+        res,
+        'scout',
+        'done',
+        scoutPack.sources?.length ? 'Sources ready' : 'Search finished',
+        scoutPack.sources?.length
+          ? scoutPack.sources.length + ' links for Writer'
+          : 'No sources — Writer uses knowledge'
+      );
+      if (scoutPack.sources?.length) {
+        sse(res, { sources: scoutPack.sources, checks: scoutPack.checks || [] });
+      }
+    } catch (e) {
+      console.error('runScout:', e.message);
+      emitAgent(res, 'scout', 'done', 'Search error', e.message || 'failed');
     }
   } else {
-    emitAgent(
-      res,
-      'scout',
-      'done',
-      'Search off',
-      (plan.scoutThoughts && plan.scoutThoughts[0]) || 'No web needed'
-    );
+    emitAgent(res, 'scout', 'done', 'Search skipped', 'Not needed for this message');
   }
 
   // ── Lab ──
   let labNotes = '';
   if (plan.lab) {
-    const thoughts = plan.labThoughts || ['Experiment'];
-    emitAgent(res, 'lab', 'running', 'Lab', thoughts[0] || 'Lab');
-    for (let i = 1; i < thoughts.length; i++) {
-      emitAgent(res, 'lab', 'running', 'Lab', thoughts[i]);
+    emitAgent(res, 'lab', 'running', 'Lab start', 'Goal: ' + String(plan.labGoal || userText).slice(0, 90));
+    for (const line of plan.labThoughts || []) {
+      await emitAgentSlow(res, 'lab', 'running', 'Lab', line, 300);
     }
-    const labPack = await runLab({
-      userText,
-      labGoal: plan.labGoal,
-      mode,
-      scoutContext: scoutPack.context,
-      onProgress: ({ detail, line }) => emitAgent(res, 'lab', 'running', detail, line),
-    });
-    labNotes = labPack.notes || '';
-    emitAgent(res, 'lab', 'done', 'Lab done', 'Notes ready');
+    try {
+      const labPack = await runLab({
+        userText,
+        labGoal: plan.labGoal,
+        mode,
+        scoutContext: scoutPack.context,
+        onProgress: ({ detail, line }) => emitAgent(res, 'lab', 'running', detail, line),
+      });
+      labNotes = labPack.notes || '';
+      emitAgent(res, 'lab', 'done', 'Lab done', labNotes ? 'Notes → Writer (' + labNotes.length + ' chars)' : 'Empty notes');
+    } catch (e) {
+      console.error('runLab:', e.message);
+      emitAgent(res, 'lab', 'done', 'Lab error', e.message || 'failed — Writer continues');
+      labNotes = '';
+    }
   } else {
-    emitAgent(
-      res,
-      'lab',
-      'done',
-      'Lab idle',
-      (plan.labThoughts && plan.labThoughts[0]) || 'No experiment'
-    );
+    emitAgent(res, 'lab', 'done', 'Lab skipped', 'Not needed for this message');
   }
 
-  // ── Writer prep ──
+  // ── Writer — ALWAYS runs ──
+  clearInterval(heartbeat);
+
+  // ── Writer CHECK (Scout + Lab) then final answer ──
+  let writerBrief = '';
+  try {
+    emitAgent(res, 'writer', 'running', 'Checking Scout + Lab', 'Quality pass before final answer');
+    const checked = await runWriterCheck({
+      userText,
+      mode,
+      scoutContext: scoutPack.context,
+      labNotes,
+      sources: scoutPack.sources || [],
+      onProgress: ({ detail, line }) => emitAgent(res, 'writer', 'running', detail, line),
+    });
+    writerBrief = checked.brief || '';
+  } catch (e) {
+    console.error('writerCheck:', e.message);
+    emitAgent(res, 'writer', 'running', 'Check skipped', e.message || 'continue');
+  }
+
   emitAgent(
     res,
     'writer',
     'running',
-    'Writing',
-    (plan.writerThoughts && plan.writerThoughts[0]) || 'Drafting'
+    'Writing answer',
+    (plan.writerThoughts && plan.writerThoughts[0]) || 'Composing final reply'
   );
 
   if (allImages && allImages.length) {
@@ -294,13 +356,19 @@ router.post('/chat', optionalAuth, async (req, res) => {
     ? '\n\nLive web search results (prefer these when relevant; cite links):\n' + scoutPack.context
     : '';
   const labNote = labNotes
-    ? '\n\nLab agent notes (known + web + possible). If notes say INSUFFICIENT, do not invent a full solution:\n' +
-      labNotes
+    ? '\n\nLab agent notes (use carefully; no false claims):\n' + labNotes
+    : '';
+  const briefNote = writerBrief
+    ? '\n\nWriter editor brief (FOLLOW this when writing the final answer):\n' + writerBrief
     : '';
   const fileNote = file
     ? '\n\nUser attached file "' + file.name + '":\n' + file.text
     : '';
-  const extra = dateNote + searchNote + labNote + fileNote;
+  const writerRules =
+    '\n\nWRITER RULES: You are the final agent. Review Scout sources + Lab notes + editor brief. ' +
+    'Correct soft overclaims. Prefer linked facts. Medical: educational only, no guaranteed cure. ' +
+    'If evidence is weak, say so clearly. Then write the user-facing answer.';
+  const extra = dateNote + searchNote + labNote + briefNote + fileNote + writerRules;
 
   // LLM language (Hinglish / Hindi / English) — not keyword lists
   const finalSystemPrompt = modePrompts.buildSystemPromptAsync
