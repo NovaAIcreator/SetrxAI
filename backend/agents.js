@@ -75,7 +75,11 @@ function safetyNetPlan(userText, plan, mode) {
   }
 
   if (!out.writerThoughts || !out.writerThoughts.length) {
-    out.writerThoughts = ['Review Scout + Lab', 'Fix weak claims', 'Write final answer'];
+    out.writerThoughts = [
+      'Review Scout + Lab',
+      'Fix weak claims',
+      'Write final answer',
+    ];
   }
   return out;
 }
@@ -113,13 +117,20 @@ async function planAgents(opts) {
 
       const prompt =
         'Route tools for SetrxAI. Be GENEROUS enabling scout/lab.\n' +
-        'Mode=' + mode + ' hasFile=' + !!hasFile + ' file=' + (fileName || 'none') + '\n' +
-        'scout=true: GitHub, search, news, medical, SetrxAI, prices, docs, dhundo.\n' +
+        'Mode=' +
+        mode +
+        ' hasFile=' +
+        !!hasFile +
+        ' file=' +
+        (fileName || 'none') +
+        '\n' +
+        'scout=true: GitHub, search, news, medical facts, SetrxAI, prices, docs, dhundo.\n' +
         'lab=true: ilaj/cure framing, code, deep research, design, hard problems.\n' +
         'Both false ONLY for hi/thanks.\n' +
         'JSON: {"scout":bool,"lab":bool,"searchQuery":"str","labGoal":"str",' +
         '"scoutThoughts":["short"],"labThoughts":["short"],"writerThoughts":["short"]}\n' +
-        'User: ' + (userText || '');
+        'User: ' +
+        (userText || '');
 
       const r = await withTimeout(model.generateContent(prompt), 12000, 'planAgents');
       const raw = (r.response.text() || '').replace(/```json|```/g, '').trim();
@@ -180,7 +191,11 @@ async function runScout(opts) {
     if (onProgress) {
       onProgress({
         detail: 'Found ' + (data.sources || []).length + ' sources',
-        line: (data.sources || []).slice(0, 3).map((s) => s.title).join(' · ') || 'context',
+        line:
+          (data.sources || [])
+            .slice(0, 3)
+            .map((s) => s.title)
+            .join(' · ') || 'context',
       });
       (data.sources || []).slice(0, 4).forEach((s, i) => {
         onProgress({
@@ -230,29 +245,43 @@ async function runLab(opts) {
   try {
     const res = await withTimeout(
       model.generateContent(
-        'You are Lab for SetrxAI. Mode=' + mode + '.\n' +
-        'NOTES for Writer (not final user answer).\n' +
-        '1) Known  2) Web-supported  3) Plausible  4) Limits (no fake cures/proofs)\n' +
-        'If weak: INSUFFICIENT.\n\n' +
-        'Goal: ' + goal + '\nUser: ' + userText + '\n' +
-        (ctx ? 'Web:\n' + ctx : 'Web: none')
+        'You are Lab for SetrxAI. Mode=' +
+          mode +
+          '.\n' +
+          'Write NOTES for Writer (not the final user-facing answer).\n' +
+          'Sections:\n' +
+          '1) Known (established)\n' +
+          '2) Web-supported (if any)\n' +
+          '3) Plausible / research directions\n' +
+          '4) Limits — no fake cures, no invented file trees/code/stats\n' +
+          'If weak: mark INSUFFICIENT.\n\n' +
+          'Goal: ' +
+          goal +
+          '\nUser: ' +
+          userText +
+          '\n' +
+          (ctx ? 'Web:\n' + ctx : 'Web: none')
       ),
       22000,
       'lab'
     );
     const notes = (res.response.text() || '').trim();
     if (onProgress) {
-      onProgress({ detail: 'Lab done', line: 'Notes (' + notes.length + ' chars) → Writer review' });
+      onProgress({
+        detail: 'Lab done',
+        line: 'Notes (' + notes.length + ' chars) → Writer review',
+      });
     }
     return { notes: notes };
   } catch (e) {
     console.error('runLab:', e.message);
     if (onProgress) onProgress({ detail: 'Lab timeout/error', line: e.message || 'failed' });
-    return { notes: 'Lab incomplete. Writer must state uncertainty.' };
+    return {
+      notes: 'Lab incomplete. Writer must answer carefully and state uncertainty.',
+    };
   }
 }
 
-/** Writer reviews Scout + Lab, then final stream uses this brief */
 async function runWriterCheck(opts) {
   const userText = opts.userText;
   const mode = opts.mode;
@@ -274,12 +303,12 @@ async function runWriterCheck(opts) {
 
   const key = getGeminiKey();
   if (!key) {
-    if (onProgress) onProgress({ detail: 'Review skipped', line: 'Direct write' });
+    if (onProgress) onProgress({ detail: 'Review skipped', line: 'No API key — direct write' });
     return { brief: '' };
   }
 
   if (!scoutContext && !labNotes) {
-    if (onProgress) onProgress({ detail: 'Review', line: 'Nothing to merge' });
+    if (onProgress) onProgress({ detail: 'Review', line: 'Nothing to merge — direct answer' });
     return { brief: '' };
   }
 
@@ -291,30 +320,47 @@ async function runWriterCheck(opts) {
     });
 
     if (onProgress) {
-      onProgress({ detail: 'Cross-checking', line: 'Drop weak claims, keep solid facts' });
+      onProgress({
+        detail: 'Cross-checking',
+        line: 'Drop invented structure/code/stats; keep solid facts',
+      });
     }
 
     const res = await withTimeout(
       model.generateContent(
-        'You are Writer-Editor for SetrxAI. Mode=' + mode + '.\n' +
-        'User: ' + userText + '\n\n' +
-        'Scout:\n' + (scoutContext || '(none)').slice(0, 2500) + '\n\n' +
-        'Lab:\n' + (labNotes || '(none)').slice(0, 2500) + '\n\n' +
-        'Short EDITOR BRIEF only:\n' +
-        '- Must keep\n- Must soften/drop\n- Must state limits\n- Reply structure\n' +
-        'No full essay.'
+        'You are Writer-Editor for SetrxAI. Mode=' +
+          mode +
+          '.\n' +
+          'User asked: ' +
+          userText +
+          '\n\n' +
+          'Scout web (may be partial):\n' +
+          (scoutContext || '(none)').slice(0, 2500) +
+          '\n\n' +
+          'Lab notes:\n' +
+          (labNotes || '(none)').slice(0, 2500) +
+          '\n\n' +
+          'Write a short EDITOR BRIEF for the final answer (bullets):\n' +
+          '- Must keep (solid facts only)\n' +
+          '- Must drop: invented file trees, fake code, fake stats, fake sources\n' +
+          '- Must state limits / missing context\n' +
+          '- Suggested structure of final reply\n' +
+          'No final essay — only the brief. Zero fabrication.'
       ),
       14000,
       'writerCheck'
     );
     const brief = (res.response.text() || '').trim();
     if (onProgress) {
-      onProgress({ detail: 'Review done', line: 'Brief ready — writing final' });
+      onProgress({
+        detail: 'Review done',
+        line: 'Brief ready (' + brief.length + ' chars) — writing final',
+      });
     }
     return { brief: brief };
   } catch (e) {
     console.error('runWriterCheck:', e.message);
-    if (onProgress) onProgress({ detail: 'Review timeout', line: 'Write without brief' });
+    if (onProgress) onProgress({ detail: 'Review timeout', line: 'Writing without extra brief' });
     return { brief: '' };
   }
 }
