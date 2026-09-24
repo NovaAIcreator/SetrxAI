@@ -15,7 +15,17 @@ function clip(s, n) {
   return t.length <= n ? t : t.slice(0, n) + '…';
 }
 
-/** Rescues when LLM wrongly turns scout/lab off */
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error((label || 'op') + ' timeout ' + ms + 'ms')),
+      ms
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 function safetyNetPlan(userText, plan, mode) {
   const t = String(userText || '').toLowerCase();
   const out = Object.assign({}, plan);
@@ -26,7 +36,8 @@ function safetyNetPlan(userText, plan, mode) {
     /\b(latest|current|today|price|news|stock|weather|who is|kya hai)\b/.test(t) ||
     /\b(setrxai|setrx ai|setrx)\b/.test(t) ||
     /\b(docs|documentation|official site|website|url|link do)\b/.test(t) ||
-    /\b(code dekho|source code|pura code|sare codes|saare codes)\b/.test(t);
+    /\b(code dekho|source code|pura code|sare codes|saare codes)\b/.test(t) ||
+    /\b(cancer|ilaj|treatment|vaccine|medicine|drug|clinical|research paper)\b/.test(t);
 
   const clearlyNeedsLab =
     mode === 'coding' ||
@@ -39,8 +50,8 @@ function safetyNetPlan(userText, plan, mode) {
     out.scout = true;
     out.searchQuery = (out.searchQuery || userText || '').slice(0, 200);
     out.scoutThoughts = [
-      'Web lookup required',
-      'Query: ' + clip(out.searchQuery || userText, 70),
+      'Web needed: ' + clip(userText, 50),
+      'Search query: ' + clip(out.searchQuery, 70),
     ];
   }
 
@@ -52,24 +63,20 @@ function safetyNetPlan(userText, plan, mode) {
         : clip(userText, 120);
     }
     out.scoutThoughts = [
-      'Searching GitHub / web',
-      'Query: ' + clip(out.searchQuery, 70),
+      'GitHub / project lookup',
+      'Search query: ' + clip(out.searchQuery, 70),
     ];
   }
 
   if (clearlyNeedsLab && !out.lab) {
     out.lab = true;
     out.labGoal = (out.labGoal || userText || '').slice(0, 200);
-    out.labThoughts = [
-      'Deep work / experiment',
-      'Goal: ' + clip(out.labGoal || userText, 70),
-    ];
+    out.labThoughts = ['Deep analysis', 'Goal: ' + clip(out.labGoal || userText, 70)];
   }
 
   if (!out.writerThoughts || !out.writerThoughts.length) {
-    out.writerThoughts = ['Drafting answer', 'Using Scout/Lab context if any'];
+    out.writerThoughts = ['Review Scout + Lab', 'Fix weak claims', 'Write final answer'];
   }
-
   return out;
 }
 
@@ -78,7 +85,6 @@ async function planAgents(opts) {
   const mode = opts.mode;
   const hasFile = opts.hasFile;
   const fileName = opts.fileName;
-  const hasImage = opts.hasImage;
 
   const empty = {
     scout: false,
@@ -100,38 +106,24 @@ async function planAgents(opts) {
         model: 'gemini-2.5-flash',
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 500,
+          maxOutputTokens: 400,
           responseMimeType: 'application/json',
         },
       });
 
       const prompt =
-        'You route tools for SetrxAI. Be GENEROUS with scout/lab when useful.\n' +
-        'Mode=' +
-        mode +
-        ' hasFile=' +
-        !!hasFile +
-        ' fileName=' +
-        (fileName || 'none') +
-        ' hasImage=' +
-        !!hasImage +
-        '\n\n' +
-        'RULES:\n' +
-        '1) scout=true if: GitHub, repo, web code, SetrxAI, search, prices, news, docs, dhundo, current facts.\n' +
-        '2) lab=true if: write/fix code, experiment, research, hard problem, design, deep analysis.\n' +
-        '3) Both false ONLY for hi/thanks/bye.\n' +
-        '4) GitHub/repo/codes → scout MUST true. Good searchQuery.\n' +
-        '5) Hinglish same (dhundo, batao, code dekho).\n\n' +
-        'JSON only:\n' +
-        '{"scout":boolean,"lab":boolean,"searchQuery":"string","labGoal":"string",' +
-        '"scoutThoughts":["2-4 short lines"],"labThoughts":["2-4 short lines"],"writerThoughts":["2-3 short lines"]}\n\n' +
-        'User:\n' +
-        (userText || '(empty)');
+        'Route tools for SetrxAI. Be GENEROUS enabling scout/lab.\n' +
+        'Mode=' + mode + ' hasFile=' + !!hasFile + ' file=' + (fileName || 'none') + '\n' +
+        'scout=true: GitHub, search, news, medical, SetrxAI, prices, docs, dhundo.\n' +
+        'lab=true: ilaj/cure framing, code, deep research, design, hard problems.\n' +
+        'Both false ONLY for hi/thanks.\n' +
+        'JSON: {"scout":bool,"lab":bool,"searchQuery":"str","labGoal":"str",' +
+        '"scoutThoughts":["short"],"labThoughts":["short"],"writerThoughts":["short"]}\n' +
+        'User: ' + (userText || '');
 
-      const r = await model.generateContent(prompt);
+      const r = await withTimeout(model.generateContent(prompt), 12000, 'planAgents');
       const raw = (r.response.text() || '').replace(/```json|```/g, '').trim();
       const p = JSON.parse(raw);
-
       plan = {
         scout: !!p.scout,
         lab: !!p.lab,
@@ -148,11 +140,9 @@ async function planAgents(opts) {
           : empty.writerThoughts,
       };
     } catch (e) {
-      console.error('planAgents LLM failed:', e.message);
+      console.error('planAgents:', e.message);
       plan = empty;
     }
-  } else {
-    console.warn('planAgents: no Gemini key — safety net only');
   }
 
   return safetyNetPlan(userText, plan, mode);
@@ -168,57 +158,45 @@ async function runScout(opts) {
   if (/\b(setrxai|setrx)\b/.test(lower) && /github|repo|code|source/.test(lower)) {
     q = 'SetrxAI GitHub NovaAIcreator/SetrxAI repository';
   }
+  if (/\b(cancer|ilaj)\b/.test(lower) && q.length < 40) {
+    q = 'cancer treatment options current medical research overview';
+  }
 
   if (!q) {
-    if (onProgress) onProgress({ detail: 'Idle', line: 'No search query' });
+    if (onProgress) onProgress({ detail: 'Idle', line: 'No query' });
     return { sources: [], context: '', checks: [] };
   }
 
-  if (onProgress) onProgress({ detail: 'Searching', line: 'Query: ' + clip(q, 70) });
+  if (onProgress) {
+    onProgress({ detail: 'Searching the web', line: 'Query → ' + clip(q, 90) });
+  }
 
   try {
-    const data = await searchWeb(q);
+    const data = await withTimeout(searchWeb(q), 18000, 'tavily');
     if (!data || !data.context) {
-      if (q !== userText && userText) {
-        if (onProgress) onProgress({ detail: 'Retry', line: 'Broader: ' + clip(userText, 60) });
-        const data2 = await searchWeb(String(userText).slice(0, 200));
-        if (data2 && data2.context) {
-          if (onProgress) {
-            onProgress({
-              detail: 'Sources ready',
-              line: (data2.sources || [])
-                .slice(0, 3)
-                .map(function (s) {
-                  return s.title;
-                })
-                .join(' · '),
-            });
-          }
-          return {
-            sources: data2.sources || [],
-            context: data2.context || '',
-            checks: [{ note: 'Tavily retry' }],
-          };
-        }
-      }
-      if (onProgress) onProgress({ detail: 'No results', line: 'Empty for: ' + clip(q, 50) });
-      return { sources: [], context: '', checks: [{ note: 'No web results' }] };
+      if (onProgress) onProgress({ detail: 'No results', line: 'Empty: ' + clip(q, 50) });
+      return { sources: [], context: '', checks: [{ note: 'No results' }] };
     }
-    const titles = (data.sources || [])
-      .slice(0, 3)
-      .map(function (s) {
-        return s.title;
-      })
-      .join(' · ');
-    if (onProgress) onProgress({ detail: 'Sources ready', line: titles || 'Context packed' });
+    if (onProgress) {
+      onProgress({
+        detail: 'Found ' + (data.sources || []).length + ' sources',
+        line: (data.sources || []).slice(0, 3).map((s) => s.title).join(' · ') || 'context',
+      });
+      (data.sources || []).slice(0, 4).forEach((s, i) => {
+        onProgress({
+          detail: 'Reading source ' + (i + 1),
+          line: clip(s.title, 50) + ' | ' + clip(s.url, 48),
+        });
+      });
+    }
     return {
       sources: data.sources || [],
       context: data.context || '',
-      checks: [{ note: 'Tavily live search' }],
+      checks: [{ note: 'Live web: ' + clip(q, 50) }],
     };
   } catch (e) {
     if (onProgress) onProgress({ detail: 'Search failed', line: e.message || 'error' });
-    return { sources: [], context: '', checks: [{ note: 'Search error: ' + (e.message || '') }] };
+    return { sources: [], context: '', checks: [{ note: 'Search error' }] };
   }
 }
 
@@ -238,56 +216,113 @@ async function runLab(opts) {
   const genAI = new GoogleGenerativeAI(key);
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.5-flash',
-    generationConfig: { temperature: 0.4, maxOutputTokens: 1400 },
+    generationConfig: { temperature: 0.35, maxOutputTokens: 900 },
   });
 
-  const ctx = scoutContext ? String(scoutContext).slice(0, 3500) : '';
+  const ctx = scoutContext ? String(scoutContext).slice(0, 2800) : '';
   const goal = labGoal || userText;
 
   if (onProgress) {
-    onProgress({ detail: 'Lab · Propose', line: 'Known + possible for: ' + clip(goal, 55) });
+    onProgress({ detail: 'Lab running', line: 'Topic: ' + clip(goal, 70) });
+    onProgress({ detail: 'Reasoning', line: 'Known facts + web + honest limits' });
   }
 
-  const proposeRes = await model.generateContent(
-    'You are Lab-Propose for SetrxAI. Mode=' +
-      mode +
-      '.\n' +
-      'Combine known + web + possible. No fake cures/proofs.\n' +
-      'Goal: ' +
-      goal +
-      '\nUser: ' +
-      userText +
-      '\n' +
-      (ctx ? 'Web context:\n' + ctx : '')
-  );
-  const proposal = (proposeRes.response.text() || '').trim();
-
-  if (onProgress) onProgress({ detail: 'Lab · Critique', line: 'Checking overclaims and gaps' });
-
-  const critiqueRes = await model.generateContent(
-    'Lab-Critique. Find holes. Short bullets.\n\nProposal:\n' + proposal.slice(0, 6000)
-  );
-  const critique = (critiqueRes.response.text() || '').trim();
-
-  if (onProgress) {
-    onProgress({ detail: 'Lab · Refine', line: 'Merge + decide if answerable' });
+  try {
+    const res = await withTimeout(
+      model.generateContent(
+        'You are Lab for SetrxAI. Mode=' + mode + '.\n' +
+        'NOTES for Writer (not final user answer).\n' +
+        '1) Known  2) Web-supported  3) Plausible  4) Limits (no fake cures/proofs)\n' +
+        'If weak: INSUFFICIENT.\n\n' +
+        'Goal: ' + goal + '\nUser: ' + userText + '\n' +
+        (ctx ? 'Web:\n' + ctx : 'Web: none')
+      ),
+      22000,
+      'lab'
+    );
+    const notes = (res.response.text() || '').trim();
+    if (onProgress) {
+      onProgress({ detail: 'Lab done', line: 'Notes (' + notes.length + ' chars) → Writer review' });
+    }
+    return { notes: notes };
+  } catch (e) {
+    console.error('runLab:', e.message);
+    if (onProgress) onProgress({ detail: 'Lab timeout/error', line: e.message || 'failed' });
+    return { notes: 'Lab incomplete. Writer must state uncertainty.' };
   }
-
-  const refineRes = await model.generateContent(
-    'Lab-Refine FINAL notes for Writer. If empty say INSUFFICIENT.\n' +
-      'Proposal:\n' +
-      proposal.slice(0, 4000) +
-      '\nCritique:\n' +
-      critique.slice(0, 2500) +
-      '\nGoal: ' +
-      goal
-  );
-  const notes = (refineRes.response.text() || '').trim();
-
-  if (onProgress) {
-    onProgress({ detail: 'Lab done', line: 'Notes ready (' + notes.length + ' chars)' });
-  }
-  return { notes: notes, proposal: proposal, critique: critique };
 }
 
-module.exports = { planAgents: planAgents, runScout: runScout, runLab: runLab };
+/** Writer reviews Scout + Lab, then final stream uses this brief */
+async function runWriterCheck(opts) {
+  const userText = opts.userText;
+  const mode = opts.mode;
+  const scoutContext = opts.scoutContext || '';
+  const labNotes = opts.labNotes || '';
+  const sources = opts.sources || [];
+  const onProgress = opts.onProgress;
+
+  if (onProgress) {
+    onProgress({
+      detail: 'Reviewing Scout',
+      line: sources.length ? sources.length + ' sources' : 'No web sources',
+    });
+    onProgress({
+      detail: 'Reviewing Lab',
+      line: labNotes ? clip(labNotes, 80) : 'No lab notes',
+    });
+  }
+
+  const key = getGeminiKey();
+  if (!key) {
+    if (onProgress) onProgress({ detail: 'Review skipped', line: 'Direct write' });
+    return { brief: '' };
+  }
+
+  if (!scoutContext && !labNotes) {
+    if (onProgress) onProgress({ detail: 'Review', line: 'Nothing to merge' });
+    return { brief: '' };
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(key);
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash',
+      generationConfig: { temperature: 0.2, maxOutputTokens: 500 },
+    });
+
+    if (onProgress) {
+      onProgress({ detail: 'Cross-checking', line: 'Drop weak claims, keep solid facts' });
+    }
+
+    const res = await withTimeout(
+      model.generateContent(
+        'You are Writer-Editor for SetrxAI. Mode=' + mode + '.\n' +
+        'User: ' + userText + '\n\n' +
+        'Scout:\n' + (scoutContext || '(none)').slice(0, 2500) + '\n\n' +
+        'Lab:\n' + (labNotes || '(none)').slice(0, 2500) + '\n\n' +
+        'Short EDITOR BRIEF only:\n' +
+        '- Must keep\n- Must soften/drop\n- Must state limits\n- Reply structure\n' +
+        'No full essay.'
+      ),
+      14000,
+      'writerCheck'
+    );
+    const brief = (res.response.text() || '').trim();
+    if (onProgress) {
+      onProgress({ detail: 'Review done', line: 'Brief ready — writing final' });
+    }
+    return { brief: brief };
+  } catch (e) {
+    console.error('runWriterCheck:', e.message);
+    if (onProgress) onProgress({ detail: 'Review timeout', line: 'Write without brief' });
+    return { brief: '' };
+  }
+}
+
+module.exports = {
+  planAgents,
+  runScout,
+  runLab,
+  runWriterCheck,
+  withTimeout,
+};
