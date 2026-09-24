@@ -204,7 +204,6 @@ router.post('/chat', optionalAuth, async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  // Provider routing (vision / model pick) — keep existing brain
   const decision = await think({
     userText,
     hasImage: !!(allImages && allImages.length),
@@ -212,7 +211,6 @@ router.post('/chat', optionalAuth, async (req, res) => {
     mode,
   });
 
-  // Keep SSE alive on Render (prevent proxy idle cut)
   const heartbeat = setInterval(() => {
     try {
       sse(res, { ping: Date.now() });
@@ -220,7 +218,6 @@ router.post('/chat', optionalAuth, async (req, res) => {
   }, 12000);
   res.on('close', () => clearInterval(heartbeat));
 
-  // Multi-agent plan — never hang forever
   let plan = {
     scout: false,
     lab: false,
@@ -248,7 +245,6 @@ router.post('/chat', optionalAuth, async (req, res) => {
     emitAgent(res, 'writer', 'running', 'Plan fallback', e.message || 'using defaults');
   }
 
-  // ── Scout ──
   if (file?.name) {
     emitAgent(res, 'scout', 'running', 'Reading file', 'File: ' + file.name);
   }
@@ -287,7 +283,6 @@ router.post('/chat', optionalAuth, async (req, res) => {
     emitAgent(res, 'scout', 'done', 'Search skipped', 'Not needed for this message');
   }
 
-  // ── Lab ──
   let labNotes = '';
   if (plan.lab) {
     emitAgent(res, 'lab', 'running', 'Lab start', 'Goal: ' + String(plan.labGoal || userText).slice(0, 90));
@@ -303,7 +298,13 @@ router.post('/chat', optionalAuth, async (req, res) => {
         onProgress: ({ detail, line }) => emitAgent(res, 'lab', 'running', detail, line),
       });
       labNotes = labPack.notes || '';
-      emitAgent(res, 'lab', 'done', 'Lab done', labNotes ? 'Notes → Writer (' + labNotes.length + ' chars)' : 'Empty notes');
+      emitAgent(
+        res,
+        'lab',
+        'done',
+        'Lab done',
+        labNotes ? 'Notes → Writer (' + labNotes.length + ' chars)' : 'Empty notes'
+      );
     } catch (e) {
       console.error('runLab:', e.message);
       emitAgent(res, 'lab', 'done', 'Lab error', e.message || 'failed — Writer continues');
@@ -313,10 +314,8 @@ router.post('/chat', optionalAuth, async (req, res) => {
     emitAgent(res, 'lab', 'done', 'Lab skipped', 'Not needed for this message');
   }
 
-  // ── Writer — ALWAYS runs ──
   clearInterval(heartbeat);
 
-  // ── Writer CHECK (Scout + Lab) then final answer ──
   let writerBrief = '';
   try {
     emitAgent(res, 'writer', 'running', 'Checking Scout + Lab', 'Quality pass before final answer');
@@ -367,10 +366,12 @@ router.post('/chat', optionalAuth, async (req, res) => {
   const writerRules =
     '\n\nWRITER RULES: You are the final agent. Review Scout sources + Lab notes + editor brief. ' +
     'Correct soft overclaims. Prefer linked facts. Medical: educational only, no guaranteed cure. ' +
-    'If evidence is weak, say so clearly. Then write the user-facing answer.';
+    'If evidence is weak, say so clearly. ' +
+    'Do not invent fake stats, papers, or claim you opened a repo without context. ' +
+    'When the user asks to BUILD a project: provide real folder structure and full working code. ' +
+    'Match user language. Then write the user-facing answer.';
   const extra = dateNote + searchNote + labNote + briefNote + fileNote + writerRules;
 
-  // LLM language (Hinglish / Hindi / English) — not keyword lists
   const finalSystemPrompt = modePrompts.buildSystemPromptAsync
     ? await modePrompts.buildSystemPromptAsync(mode, extra, userText)
     : modePrompts.buildSystemPrompt
