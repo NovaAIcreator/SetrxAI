@@ -685,6 +685,9 @@ export default function ChatWindow({ mode, setMode, sessionId, messages, setMess
           try {
             const parsed = JSON.parse(jsonStr);
 
+            // Heartbeat from backend — ignore
+            if (parsed.ping) continue;
+
             // Backend live agents (Scout / Lab / Writer)
             if (parsed.agent && parsed.agent.id) {
               const a = parsed.agent;
